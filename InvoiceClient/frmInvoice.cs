@@ -57,7 +57,7 @@ namespace InvoiceClient
             {
                 Employname = cboemployeename.Text;
             }
-            sql = "SELECT CustomerName As [Tên Quán],CustomerPhone as SĐT,CustomerAddress as [Địa Chỉ],ServiceNames as [Items],UnitPrice as [Unit Price],TotalPrice as [Total Price],CreatedAt as [Created At],IsPaid,DeliveryStatus as [Delivery Status],IsDraft,InvoiceNoViettel as [Invoice No Viettel] ,* FROM Orders " +
+            sql = "SELECT CustomerName As [Tên Quán],CustomerPhone as SĐT,CustomerAddress as [Địa Chỉ],ServiceNames as [Items],ServiceQuantities as [Số Lượng],UnitPrice as [Unit Price],TotalPrice as [Total Price],CreatedAt as [Created At],IsPaid,DeliveryStatus as [Delivery Status],IsDraft,InvoiceNoViettel as [Invoice No Viettel] ,* FROM Orders_viettel " +
                   "WHERE CAST(createdat AS date) BETWEEN '" +
                   dateTimePicker1.Value.ToString("yyyy-MM-dd") + "' AND '" +
                   dateTimePicker2.Value.ToString("yyyy-MM-dd") + "' " +
@@ -100,8 +100,30 @@ namespace InvoiceClient
             dataGridView1.Columns["CustomerPhone"].Visible = true;
             dataGridView1.Columns["CustomerAddress"].Visible = true;
             dataGridView1.Columns["ServiceNames"].Visible = true;
-            dataGridView1.Columns["UnitPrice"].Visible = true;
-            dataGridView1.Columns["TotalPrice"].Visible = true;
+            dataGridView1.Columns["ServiceQuantities"].Visible = true;
+            
+            // Format UnitPrice với dấu phẩy phân cách hàng nghìn, giữ nguyên số thập phân
+            // Vì UnitPrice là nvarchar (mảng) nên cần format trong CellFormatting event
+            if (dataGridView1.Columns["UnitPrice"] != null)
+            {
+                dataGridView1.Columns["UnitPrice"].Visible = true;
+            }
+            
+            // Format TotalPrice với dấu phẩy phân cách hàng nghìn, giữ nguyên số thập phân
+            if (dataGridView1.Columns["TotalPrice"] != null)
+            {
+                dataGridView1.Columns["TotalPrice"].Visible = true;
+                dataGridView1.Columns["TotalPrice"].DefaultCellStyle = new DataGridViewCellStyle
+                {
+                    Format = "#,##0.################################################################",
+                    FormatProvider = System.Globalization.CultureInfo.InvariantCulture
+                };
+            }
+            
+            // Đăng ký event CellFormatting để format UnitPrice (mảng nvarchar)
+            dataGridView1.CellFormatting -= dataGridView1_CellFormatting;
+            dataGridView1.CellFormatting += dataGridView1_CellFormatting;
+            
             dataGridView1.Columns["CreatedAt"].Visible = true;
             dataGridView1.Columns["IsPaid"].Visible = true;
             dataGridView1.Columns["DeliveryStatus"].Visible = true;
@@ -112,6 +134,43 @@ namespace InvoiceClient
             if (dataGridView1.Columns.Contains("Select"))
             {
                 dataGridView1.Columns["Select"].Visible = true;
+            }
+            
+            // Đặt màu vàng nhạt cho các dòng có IsConvertToLiter == false
+            foreach (DataGridViewRow row in dataGridView1.Rows)
+            {
+                if (row.Cells["id"] != null && row.Cells["id"].Value != null)
+                {
+                    string orderId = row.Cells["id"].Value.ToString().Trim();
+                    if (!string.IsNullOrEmpty(orderId))
+                    {
+                        try
+                        {
+                            cnn.Open();
+                            string sqlCheck = $"SELECT IsConvertToLiter FROM Orders_Viettel WHERE id = '{orderId}'";
+                            SqlCommand comCheck = new SqlCommand(sqlCheck, cnn);
+                            object result = comCheck.ExecuteScalar();
+                            cnn.Close();
+
+                            bool isConvertToLiter = false;
+                            if (result != null && result != DBNull.Value)
+                            {
+                                isConvertToLiter = Convert.ToBoolean(result);
+                            }
+
+                            // Nếu IsConvertToLiter == false hoặc NULL, đặt màu cam nhạt
+                            if (!isConvertToLiter)
+                            {
+                                row.DefaultCellStyle.BackColor = System.Drawing.Color.PeachPuff;
+                            }
+                        }
+                        catch
+                        {
+                            if (cnn.State == ConnectionState.Open)
+                                cnn.Close();
+                        }
+                    }
+                }
             }
             
             cnn.Close();  // đóng kết nối
@@ -494,7 +553,7 @@ namespace InvoiceClient
             cnn.Open();
             string idList = string.Join("','", idsForSql);
             
-            string sql1 = $"SELECT * FROM orders WHERE id IN ('{idList}')";
+            string sql1 = $"SELECT * FROM Orders_viettel WHERE id IN ('{idList}')";
             
             SqlCommand com1 = new SqlCommand(sql1, cnn); //bat dau truy van
             com1.CommandType = CommandType.Text;
@@ -749,7 +808,7 @@ namespace InvoiceClient
             //Item info
             double sumTotalTaxAmount = 0, sumTotalAmountWithoutTax = 0, totalamountwithtax = 0, totaltax = 0,totaldiscount =0;
             List<ItemInfo> lstItem = new List<ItemInfo>();
-            int stt = 1; // Đếm lineNumber liên tục qua tất cả orders
+            int stt = 1; // Đếm lineNumber liên tục qua tất cả Orders_viettel
             if (ds != null && ds.Tables.Count > 0 && ds.Tables[0].Rows.Count > 0)
             {
                 for (int i = 0; i < ds.Tables[0].Rows.Count; i++)
@@ -774,8 +833,8 @@ namespace InvoiceClient
                     var UnitPrices = UnitPriceRaw
                      .Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
                      .Select(x => double.TryParse(x.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var val)
-                         ? (int)Math.Round(val)
-                         : 0)
+                         ? val
+                         : 0.0)
                      .ToList();
 
                     // Nếu không khớp số lượng thì bỏ qua
@@ -808,16 +867,16 @@ namespace InvoiceClient
                             {
                                 item.itemCode = dsservices.Tables[0].Rows[0]["Code"].ToString();
                                 item.itemName = dsservices.Tables[0].Rows[0]["Name"].ToString();
-                                
-                                // Kiểm tra checkbox chkchuyenL
-                                if (chkchuyenL.Checked)
-                                {
-                                    item.unitName = "Lít"; // Mặc định là "L" (Lít)
-                                }
-                                else
-                                {
-                                    item.unitName = dsservices.Tables[0].Rows[0]["Unit"].ToString();
-                                }
+                                item.unitName = "Lít"; // Mặc định là "L" (Lít)
+                                //// Kiểm tra checkbox chkchuyenL
+                                //if (chkchuyenL.Checked)
+                                //{
+                                //    item.unitName = "Lít"; // Mặc định là "L" (Lít)
+                                //}
+                                //else
+                                //{
+                                //    item.unitName = dsservices.Tables[0].Rows[0]["Unit"].ToString();
+                                //}
                             }
                         }
 
@@ -827,27 +886,27 @@ namespace InvoiceClient
                         int quantity = Convert.ToInt32(quantities[j]);
                         
                         // Nếu checkbox chkchuyenL được tick, tính lại quantity và unitPrice
-                        if (chkchuyenL.Checked && dsservices != null && dsservices.Tables[0].Rows.Count > 0)
-                        {
-                            // Lấy Production từ Services
-                            double production = 0;
-                            if (dsservices.Tables[0].Rows[0]["Production"] != null && dsservices.Tables[0].Rows[0]["Production"] != DBNull.Value)
-                            {
-                                double.TryParse(dsservices.Tables[0].Rows[0]["Production"].ToString(), out production);
-                            }
+                        //if (chkchuyenL.Checked && dsservices != null && dsservices.Tables[0].Rows.Count > 0)
+                        //{
+                        //    // Lấy Production từ Services
+                        //    double production = 0;
+                        //    if (dsservices.Tables[0].Rows[0]["Production"] != null && dsservices.Tables[0].Rows[0]["Production"] != DBNull.Value)
+                        //    {
+                        //        double.TryParse(dsservices.Tables[0].Rows[0]["Production"].ToString(), out production);
+                        //    }
                             
-                            if (production > 0)
-                            {
-                                // quantity mới = Production * quantities[j]
-                                int quantityNew = (int)(production * quantity);
+                        //    if (production > 0)
+                        //    {
+                        //        // quantity mới = Production * quantities[j]
+                        //        int quantityNew = (int)(production * quantity);
                                 
-                                // unitPrice mới = unitPrice hiện tại / Production
-                                double unitPriceNew = unitPrice / production;
+                        //        // unitPrice mới = unitPrice hiện tại / Production
+                        //        double unitPriceNew = unitPrice / production;
                                 
-                                quantity = quantityNew;
-                                unitPrice = unitPriceNew;
-                            }
-                        }
+                        //        quantity = quantityNew;
+                        //        unitPrice = unitPriceNew;
+                        //    }
+                        //}
 
                         // Tính tiền trước thuế
                         //double amountWithoutTax = unitPrice * quantity ; 
@@ -1272,6 +1331,22 @@ namespace InvoiceClient
 
                 foreach (DataGridViewRow row in selectedRows)
                 {
+                    if (listIds.Count > 0)
+                    {
+                        cnn.Open();
+                        string idsForSqlCheck = string.Join("','", listIds);
+                        string sqlCheck = $"SELECT COUNT(*) FROM Orders_Viettel WHERE id IN ('{idsForSqlCheck}') AND (IsConvertToLiter IS NULL OR IsConvertToLiter = 0)";
+                        SqlCommand comCheck = new SqlCommand(sqlCheck, cnn);
+                        int countNotConverted = Convert.ToInt32(comCheck.ExecuteScalar());
+                        cnn.Close();
+
+                        if (countNotConverted > 0)
+                        {
+                            MessageBox.Show("Các orders đã chọn phải được convert sang Liter trước khi lập nháp hóa đơn!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            return;
+                        }
+                    }
+
                     if (row.Cells["id"].Value != null)
                     {
                         string id = row.Cells["id"].Value.ToString().Trim();
@@ -1310,7 +1385,7 @@ namespace InvoiceClient
                 if (!string.IsNullOrEmpty(firstHoaDonNoiBo))
                 {
                     cnn.Open();
-                    string checkcount = $"SELECT Count(*) FROM orders WHERE HoaDonNoiBo = '{firstHoaDonNoiBo}'";
+                    string checkcount = $"SELECT Count(*) FROM Orders_viettel WHERE HoaDonNoiBo = '{firstHoaDonNoiBo}'";
                     SqlCommand comCheck = new SqlCommand(checkcount, cnn);
                     int countInDatabase = Convert.ToInt32(comCheck.ExecuteScalar());
                     cnn.Close();
@@ -1375,7 +1450,7 @@ namespace InvoiceClient
                 cnn.Open();
                 // Tạo danh sách ID với dấu nháy đơn cho SQL IN clause
                 string idsForSql = string.Join("','", listIds);
-                string sqlupdate = "update orders set DateInvViettel= '" + dtNow + "', InvoiceNoViettel = '" + sohoadon_vtel + "', mauso = '" + txtmauso.Text + "' where id in ('" + idsForSql + "')";
+                string sqlupdate = "update Orders_viettel set DateInvViettel= '" + dtNow + "', InvoiceNoViettel = '" + sohoadon_vtel + "', mauso = '" + txtmauso.Text + "' where id in ('" + idsForSql + "')";
                 SqlCommand comupdate = new SqlCommand(sqlupdate, cnn);
                 comupdate.ExecuteNonQuery();
 
@@ -1447,6 +1522,7 @@ namespace InvoiceClient
 
                 foreach (DataGridViewRow row in selectedRows)
                 {
+
                     if (row.Cells["id"].Value != null)
                     {
                         string id = row.Cells["id"].Value.ToString().Trim();
@@ -1484,6 +1560,23 @@ namespace InvoiceClient
                 }
 
                 string ids = string.Join(",", listIds); // Tạo string ids từ danh sách
+
+                // Kiểm tra IsConvertToLiter == true cho tất cả các orders đã chọn
+                if (listIds.Count > 0)
+                {
+                    cnn.Open();
+                    string idsForSqlCheck = string.Join("','", listIds);
+                    string sqlCheck = $"SELECT COUNT(*) FROM Orders_Viettel WHERE id IN ('{idsForSqlCheck}') AND (IsConvertToLiter IS NULL OR IsConvertToLiter = 0)";
+                    SqlCommand comCheck = new SqlCommand(sqlCheck, cnn);
+                    int countNotConverted = Convert.ToInt32(comCheck.ExecuteScalar());
+                    cnn.Close();
+
+                    if (countNotConverted > 0)
+                    {
+                        MessageBox.Show("Các orders đã chọn phải được convert sang Liter trước khi lập nháp hóa đơn!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+                }
 
                 // Hiển thị form nhập số hóa đơn nội bộ
                 frmInputInvoiceNo frmInput = new frmInputInvoiceNo();
@@ -1552,7 +1645,7 @@ namespace InvoiceClient
                 cnn.Open();
                 // Tạo danh sách ID với dấu nháy đơn cho SQL IN clause
                 string idsForSql = string.Join("','", listIds);
-                string sqlupdate = "update orders set IsDraft=1 , hoadonnoibo ='"+ sohoadon_noibo + "' where id in ('" + idsForSql + "')";  // update tất cả các ID đã chọn
+                string sqlupdate = "update Orders_viettel set IsDraft=1 , hoadonnoibo ='"+ sohoadon_noibo + "' where id in ('" + idsForSql + "')";  // update tất cả các ID đã chọn
                 SqlCommand comupdate = new SqlCommand(sqlupdate, cnn); //bat dau truy van
                 comupdate.ExecuteNonQuery();
 
@@ -1739,6 +1832,108 @@ namespace InvoiceClient
         private void frmInvoice_Load(object sender, EventArgs e)
         {
 
+        }
+
+        private void btnEdit_Click(object sender, EventArgs e)
+        {
+            try
+            {
+           
+                // Lấy các dòng đã được tick checkbox
+                List<DataGridViewRow> selectedRows = new List<DataGridViewRow>();
+                foreach (DataGridViewRow row in dataGridView1.Rows)
+                {
+                    if (row.Cells["Select"] != null)
+                    {
+                        object cellValue = row.Cells["Select"].Value;
+                        if (cellValue != null && cellValue != DBNull.Value)
+                        {
+                            bool isChecked = false;
+                            if (cellValue is bool)
+                            {
+                                isChecked = (bool)cellValue;
+                            }
+                            else
+                            {
+                                bool.TryParse(cellValue.ToString(), out isChecked);
+                            }
+                            
+                            if (isChecked)
+                            {
+                                selectedRows.Add(row);
+                            }
+                        }
+                    }
+                }
+
+                if (selectedRows.Count == 0)
+                {
+                    MessageBox.Show("Vui lòng chọn một dòng dữ liệu để chỉnh sửa!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                // Chỉ cho phép chọn 1 row
+                if (selectedRows.Count > 1)
+                {
+                    MessageBox.Show("Vui lòng chỉ chọn một dòng dữ liệu để chỉnh sửa!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                // Lấy ID của order đã chọn
+                string orderId = selectedRows[0].Cells["id"]?.Value?.ToString()?.Trim();
+                if (string.IsNullOrEmpty(orderId))
+                {
+                    MessageBox.Show("Không thể lấy ID của order!", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                // Mở form chỉnh sửa 1 order
+                frmEditOrder frmEdit = new frmEditOrder(orderId);
+                if (frmEdit.ShowDialog() == DialogResult.OK)
+                {
+                    // Refresh lại dữ liệu sau khi lưu thành công
+                    Search();
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Lỗi khi mở form chỉnh sửa: " + ex.Message, "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void dataGridView1_CellFormatting(object sender, DataGridViewCellFormattingEventArgs e)
+        {
+            // Format UnitPrice (nvarchar - mảng) với dấu phẩy phân cách hàng nghìn
+            if (dataGridView1.Columns[e.ColumnIndex].Name == "UnitPrice" && e.Value != null)
+            {
+                string valueStr = e.Value.ToString();
+                // Loại bỏ dấu ngoặc vuông nếu có (format array)
+                valueStr = valueStr.Replace("[", "").Replace("]", "").Trim();
+                
+                if (!string.IsNullOrEmpty(valueStr))
+                {
+                    // Parse tất cả các giá trị trong mảng và format lại
+                    string[] values = valueStr.Split(',');
+                    List<string> formattedValues = new List<string>();
+                    
+                    foreach (string val in values)
+                    {
+                        string trimmedVal = val.Trim().Replace("\"", "");
+                        if (double.TryParse(trimmedVal, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double numValue))
+                        {
+                            formattedValues.Add(numValue.ToString("#,##0.################################################################", System.Globalization.CultureInfo.InvariantCulture));
+                        }
+                        else
+                        {
+                            formattedValues.Add(trimmedVal);
+                        }
+                    }
+                    
+                    // Hiển thị tất cả các giá trị đã format, cách nhau bằng dấu "/"
+                    e.Value = string.Join("/", formattedValues);
+                    e.FormattingApplied = true;
+                }
+            }
         }
     }
 }

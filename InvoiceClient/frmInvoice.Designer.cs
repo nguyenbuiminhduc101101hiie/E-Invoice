@@ -36,6 +36,7 @@
             this.btnCancel = new System.Windows.Forms.Button();
             this.btnCreateInvoiceDraft = new System.Windows.Forms.Button();
             this.btnUpdatePaymentStatus = new System.Windows.Forms.Button();
+            this.btnEdit = new System.Windows.Forms.Button();
             this.txtBody = new System.Windows.Forms.TextBox();
             this.chkExample = new System.Windows.Forms.CheckBox();
             this.chkProxy = new System.Windows.Forms.CheckBox();
@@ -146,6 +147,18 @@
             this.btnUpdatePaymentStatus.UseVisualStyleBackColor = true;
             this.btnUpdatePaymentStatus.Visible = false;
             this.btnUpdatePaymentStatus.Click += new System.EventHandler(this.btnUpdatePaymentStatus_Click);
+            // 
+            // btnEdit
+            // 
+            this.btnEdit.BackColor = System.Drawing.Color.DodgerBlue;
+            this.btnEdit.ForeColor = System.Drawing.SystemColors.ButtonFace;
+            this.btnEdit.Location = new System.Drawing.Point(40, 114);
+            this.btnEdit.Name = "btnEdit";
+            this.btnEdit.Size = new System.Drawing.Size(149, 40);
+            this.btnEdit.TabIndex = 54;
+            this.btnEdit.Text = "Edit";
+            this.btnEdit.UseVisualStyleBackColor = false;
+            this.btnEdit.Click += new System.EventHandler(this.btnEdit_Click);
             // 
             // txtBody
             // 
@@ -493,8 +506,6 @@
             // chkchuyenL
             // 
             this.chkchuyenL.AutoSize = true;
-            this.chkchuyenL.Checked = true;
-            this.chkchuyenL.CheckState = System.Windows.Forms.CheckState.Checked;
             this.chkchuyenL.Location = new System.Drawing.Point(876, 148);
             this.chkchuyenL.Name = "chkchuyenL";
             this.chkchuyenL.Size = new System.Drawing.Size(90, 17);
@@ -550,6 +561,7 @@
             this.Controls.Add(this.chkExample);
             this.Controls.Add(this.txtBody);
             this.Controls.Add(this.btnUpdatePaymentStatus);
+            this.Controls.Add(this.btnEdit);
             this.Controls.Add(this.btnCreateInvoiceDraft);
             this.Controls.Add(this.btnCancel);
             this.Controls.Add(this.btnSavePDF);
@@ -578,6 +590,7 @@
         private System.Windows.Forms.Button btnCancel;
         private System.Windows.Forms.Button btnCreateInvoiceDraft;
         private System.Windows.Forms.Button btnUpdatePaymentStatus;
+        private System.Windows.Forms.Button btnEdit;
         private System.Windows.Forms.TextBox txtBody;
         private System.Windows.Forms.CheckBox chkExample;
         private System.Windows.Forms.CheckBox chkProxy;

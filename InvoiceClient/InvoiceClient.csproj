@@ -28,7 +28,7 @@
     <MinimumRequiredVersion>1.0.0.13</MinimumRequiredVersion>
     <CreateWebPageOnPublish>true</CreateWebPageOnPublish>
     <WebPage>publish.htm</WebPage>
-    <ApplicationRevision>47</ApplicationRevision>
+    <ApplicationRevision>48</ApplicationRevision>
     <ApplicationVersion>1.0.0.%2a</ApplicationVersion>
     <UseApplicationTrust>false</UseApplicationTrust>
     <CreateDesktopShortcut>true</CreateDesktopShortcut>
@@ -102,6 +102,18 @@
     <Compile Include="frmInputInvoiceNo.Designer.cs">
       <DependentUpon>frmInputInvoiceNo.cs</DependentUpon>
     </Compile>
+    <Compile Include="frmEditOrder.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="frmEditOrder.Designer.cs">
+      <DependentUpon>frmEditOrder.cs</DependentUpon>
+    </Compile>
+    <Compile Include="frmEditMultipleOrders.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="frmEditMultipleOrders.Designer.cs">
+      <DependentUpon>frmEditMultipleOrders.cs</DependentUpon>
+    </Compile>
     <Compile Include="InvoiceInfo.cs" />
     <Compile Include="NumberUtil.cs" />
     <Compile Include="Program.cs" />
@@ -111,6 +123,12 @@
     </EmbeddedResource>
     <EmbeddedResource Include="frmInputInvoiceNo.resx">
       <DependentUpon>frmInputInvoiceNo.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="frmEditOrder.resx">
+      <DependentUpon>frmEditOrder.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="frmEditMultipleOrders.resx">
+      <DependentUpon>frmEditMultipleOrders.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Properties\Resources.resx">
       <Generator>ResXFileCodeGenerator</Generator>
