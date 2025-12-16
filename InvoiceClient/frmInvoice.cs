@@ -57,13 +57,41 @@ namespace InvoiceClient
             {
                 Employname = cboemployeename.Text;
             }
-            sql = "SELECT CustomerName As [Tên Quán],CustomerPhone as SĐT,CustomerAddress as [Địa Chỉ],ServiceNames as [Items],ServiceQuantities as [Số Lượng],UnitPrice as [Unit Price],TotalPrice as [Total Price],CreatedAt as [Created At],IsPaid,DeliveryStatus as [Delivery Status],IsDraft,InvoiceNoViettel as [Invoice No Viettel] ,* FROM Orders_viettel " +
-                  "WHERE CAST(createdat AS date) BETWEEN '" +
-                  dateTimePicker1.Value.ToString("yyyy-MM-dd") + "' AND '" +
-                  dateTimePicker2.Value.ToString("yyyy-MM-dd") + "' " +
-                  "AND CustomerPhone LIKE N'%" + txtcustomerphone.Text + "%' " +
-                  "AND CustomerName LIKE N'%" + cusname + "%' " +
-                  "AND EmployeeNames LIKE N'%" + Employname + "%'";
+            if (chk_searchby_PaymentDate.Checked == true) {
+                // Search theo paymentDate trong PaymentHistory thay vì createdat
+                // Format: [{"cashAmount":0,"transferAmount":1160000,"paymentDate":"2025-12-11T16:38:37.875"}]
+                // Extract paymentDate từ JSON và so sánh với khoảng thời gian
+                // CHỈ LẤY PHẦN NGÀY (10 ký tự: yyyy-MM-dd), BỎ PHẦN GIỜ (T16:38:37.875)
+                // Ví dụ: "paymentDate":"2025-12-11T16:38:37.875" -> extract "2025-12-11" (10 ký tự)
+                string startDateStr = dateTimePicker1.Value.ToString("yyyy-MM-dd");
+                string endDateStr = dateTimePicker2.Value.ToString("yyyy-MM-dd");
+                string paymentDatePattern = "\"paymentDate\":\"";
+                int patternLength = paymentDatePattern.Length; // 15 ký tự
+                
+                sql = "SELECT CustomerName As [Tên Quán],CustomerPhone as SĐT,CustomerAddress as [Địa Chỉ],ServiceNames as [Items],ServiceQuantities as [Số Lượng],UnitPrice as [Unit Price],TotalPrice as [Total Price],CreatedAt as [Created At],IsPaid,DeliveryStatus as [Delivery Status],IsDraft,InvoiceNoViettel as [Invoice No Viettel] ,PaymentHistory,* FROM Orders_viettel " +
+                      "WHERE PaymentHistory IS NOT NULL " +
+                      "AND PaymentHistory != '' " +
+                      "AND PaymentHistory != '[]' " +
+                      "AND CHARINDEX('" + paymentDatePattern + "', PaymentHistory) > 0 " +
+                      // Extract 10 ký tự sau "paymentDate":" (chỉ phần ngày yyyy-MM-dd, bỏ phần giờ T16:38:37.875)
+                      "AND SUBSTRING(PaymentHistory, CHARINDEX('" + paymentDatePattern + "', PaymentHistory) + " + patternLength + ", 10) >= '" + startDateStr + "' " +
+                      "AND SUBSTRING(PaymentHistory, CHARINDEX('" + paymentDatePattern + "', PaymentHistory) + " + patternLength + ", 10) <= '" + endDateStr + "' " +
+                      "AND CustomerPhone LIKE N'%" + txtcustomerphone.Text + "%' " +
+                      "AND CustomerName LIKE N'%" + cusname + "%' " +
+                      "AND EmployeeNames LIKE N'%" + Employname + "%'";
+            }
+            else
+            {
+                sql = "SELECT CustomerName As [Tên Quán],CustomerPhone as SĐT,CustomerAddress as [Địa Chỉ],ServiceNames as [Items],ServiceQuantities as [Số Lượng],UnitPrice as [Unit Price],TotalPrice as [Total Price],CreatedAt as [Created At],IsPaid,DeliveryStatus as [Delivery Status],IsDraft,InvoiceNoViettel as [Invoice No Viettel] ,* FROM Orders_viettel " +
+                   "WHERE CAST(createdat AS date) BETWEEN '" +
+                   dateTimePicker1.Value.ToString("yyyy-MM-dd") + "' AND '" +
+                   dateTimePicker2.Value.ToString("yyyy-MM-dd") + "' " +
+                   "AND CustomerPhone LIKE N'%" + txtcustomerphone.Text + "%' " +
+                   "AND CustomerName LIKE N'%" + cusname + "%' " +
+                   "AND EmployeeNames LIKE N'%" + Employname + "%'";
+
+            }
+
 
 
 
@@ -146,11 +174,20 @@ namespace InvoiceClient
                     {
                         try
                         {
-                            cnn.Open();
+                            // Kiểm tra trạng thái connection trước khi mở
+                            if (cnn.State != ConnectionState.Open)
+                            {
+                                cnn.Open();
+                            }
                             string sqlCheck = $"SELECT IsConvertToLiter FROM Orders_Viettel WHERE id = '{orderId}'";
                             SqlCommand comCheck = new SqlCommand(sqlCheck, cnn);
                             object result = comCheck.ExecuteScalar();
-                            cnn.Close();
+                            
+                            // Chỉ đóng connection nếu chúng ta đã mở nó
+                            if (cnn.State == ConnectionState.Open)
+                            {
+                                cnn.Close();
+                            }
 
                             bool isConvertToLiter = false;
                             if (result != null && result != DBNull.Value)
@@ -848,7 +885,8 @@ namespace InvoiceClient
                         ItemInfo item = new ItemInfo();
 
                         item.lineNumber = stt.ToString(); // Sử dụng stt để đếm liên tục
-                        item.discount = ds.Tables[0].Rows[i]["DiscountPercent"].ToString();
+                        //item.discount = ds.Tables[0].Rows[i]["DiscountPercent"].ToString();
+                        item.discount = Convert.ToInt32(ds.Tables[0].Rows[i]["DiscountPercent"]).ToString();
 
                         cnn.Open();
                         string sqlservices = "select * from Services where id = '" + serviceIds[j] +"' ";  // lay het du lieu trong bang sinh vien
@@ -923,7 +961,8 @@ namespace InvoiceClient
 
                         item.taxAmount = Math.Round(taxAmount, 0, MidpointRounding.AwayFromZero).ToString();
 
-                        item.taxPercentage = ds.Tables[0].Rows[i]["TaxPercent"].ToString();
+                        //item.taxPercentage = ds.Tables[0].Rows[i]["TaxPercent"].ToString(); 
+                        item.taxPercentage = Convert.ToInt32(ds.Tables[0].Rows[i]["TaxPercent"]).ToString();
 
                         // Sử dụng unitPrice và quantity đã được tính toán (có thể đã thay đổi nếu chkchuyenL.Checked)
                         item.unitPrice = Math.Round(unitPrice, 0, MidpointRounding.AwayFromZero).ToString();
@@ -948,7 +987,8 @@ namespace InvoiceClient
             objSummary.totalAmountWithoutTax = (sumTotalAmountWithoutTax- totaldiscount).ToString();
             objSummary.totalAmountWithTax = (totalamountwithtax - totaldiscount).ToString();
             // Tax percentage trong summary - lấy từ order đầu tiên (chỉ để hiển thị, không ảnh hưởng tính toán)
-            objSummary.taxPercentage = ds.Tables[0].Rows[0]["TaxPercent"].ToString();
+            //objSummary.taxPercentage = ds.Tables[0].Rows[0]["TaxPercent"].ToString();
+            objSummary.taxPercentage = Convert.ToInt32(ds.Tables[0].Rows[0]["TaxPercent"]).ToString();
             objSummary.totalAmountWithTaxInWords = NumberUtil.DocSoThanhChu(objSummary.totalAmountWithTax.Replace("-", ""));
             objSummary.totalTaxAmount = totaltax.ToString();
             
@@ -1331,22 +1371,6 @@ namespace InvoiceClient
 
                 foreach (DataGridViewRow row in selectedRows)
                 {
-                    if (listIds.Count > 0)
-                    {
-                        cnn.Open();
-                        string idsForSqlCheck = string.Join("','", listIds);
-                        string sqlCheck = $"SELECT COUNT(*) FROM Orders_Viettel WHERE id IN ('{idsForSqlCheck}') AND (IsConvertToLiter IS NULL OR IsConvertToLiter = 0)";
-                        SqlCommand comCheck = new SqlCommand(sqlCheck, cnn);
-                        int countNotConverted = Convert.ToInt32(comCheck.ExecuteScalar());
-                        cnn.Close();
-
-                        if (countNotConverted > 0)
-                        {
-                            MessageBox.Show("Các orders đã chọn phải được convert sang Liter trước khi lập nháp hóa đơn!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                            return;
-                        }
-                    }
-
                     if (row.Cells["id"].Value != null)
                     {
                         string id = row.Cells["id"].Value.ToString().Trim();
@@ -1378,6 +1402,44 @@ namespace InvoiceClient
                     {
                         MessageBox.Show("Xuất hiện dữ liệu đã có Số Hóa Đơn Viettel");
                         return;
+                    }
+                }
+
+                // Tự động convert các orders chưa convert và lưu vào database
+                if (listIds.Count > 0)
+                {
+                    List<string> ordersToConvert = new List<string>();
+                    cnn.Open();
+                    string idsForSqlCheck = string.Join("','", listIds);
+                    string sqlCheck = $"SELECT id FROM Orders_Viettel WHERE id IN ('{idsForSqlCheck}') AND (IsConvertToLiter IS NULL OR IsConvertToLiter = 0)";
+                    SqlCommand comCheck = new SqlCommand(sqlCheck, cnn);
+                    SqlDataReader reader = comCheck.ExecuteReader();
+                    while (reader.Read())
+                    {
+                        ordersToConvert.Add(reader["id"].ToString());
+                    }
+                    reader.Close();
+                    cnn.Close();
+
+                    // Tự động convert các orders chưa convert
+                    if (ordersToConvert.Count > 0)
+                    {
+                        int convertedCount = 0;
+                        foreach (string orderId in ordersToConvert)
+                        {
+                            if (ConvertOrderToLiter(orderId))
+                            {
+                                convertedCount++;
+                            }
+                        }
+                        
+                        if (convertedCount > 0)
+                        {
+                            MessageBox.Show($"Đã tự động convert {convertedCount} order(s) sang Liter và lưu vào database!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                            // Refresh lại dữ liệu sau khi convert để đảm bảo dữ liệu mới nhất
+                            //Search();
+                            // Tiếp tục xử lý tạo hóa đơn, không return
+                        }
                     }
                 }
 
@@ -1461,6 +1523,144 @@ namespace InvoiceClient
             catch (Exception ex)
             {
                 MessageBox.Show("NOK " + ex.Message);
+            }
+        }
+
+        private bool ConvertOrderToLiter(string orderId)
+        {
+            try
+            {
+                // Load order data từ database
+                if (cnn.State != ConnectionState.Open)
+                {
+                    cnn.Open();
+                }
+                string sql = $"SELECT ServiceIds, ServiceNames, ServiceQuantities, UnitPrice FROM Orders_Viettel WHERE id = '{orderId}'";
+                SqlCommand com = new SqlCommand(sql, cnn);
+                SqlDataAdapter da = new SqlDataAdapter(com);
+                DataTable dt = new DataTable();
+                da.Fill(dt);
+                cnn.Close();
+
+                if (dt.Rows.Count == 0)
+                {
+                    return false;
+                }
+
+                DataRow row = dt.Rows[0];
+                
+                // Parse arrays
+                string serviceIdsRaw = row["ServiceIds"]?.ToString()?.Trim() ?? "";
+                string serviceNamesRaw = row["ServiceNames"]?.ToString()?.Trim() ?? "";
+                string quantitiesRaw = row["ServiceQuantities"]?.ToString()?.Trim() ?? "";
+                string unitPricesRaw = row["UnitPrice"]?.ToString()?.Trim() ?? "";
+
+                // Remove brackets and quotes
+                serviceIdsRaw = serviceIdsRaw.Replace("[", "").Replace("]", "").Replace("\"", "");
+                serviceNamesRaw = serviceNamesRaw.Replace("[", "").Replace("]", "").Replace("\"", "");
+                quantitiesRaw = quantitiesRaw.Replace("[", "").Replace("]", "");
+                unitPricesRaw = unitPricesRaw.Replace("[", "").Replace("]", "");
+
+                // Split arrays
+                var serviceIds = serviceIdsRaw.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                                               .Select(x => x.Trim())
+                                               .ToList();
+                var serviceNames = serviceNamesRaw.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                                                  .Select(x => x.Trim())
+                                                  .ToList();
+                var quantities = quantitiesRaw.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                                              .Select(x => int.TryParse(x.Trim(), out var val) ? val : 0)
+                                              .ToList();
+                var unitPrices = unitPricesRaw.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                                              .Select(x => double.TryParse(x.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var val) ? val : 0)
+                                              .ToList();
+
+                // Convert từng item sang Liter
+                bool hasConverted = false;
+                int maxCount = Math.Max(Math.Max(serviceIds.Count, serviceNames.Count), Math.Max(quantities.Count, unitPrices.Count));
+                
+                for (int i = 0; i < maxCount; i++)
+                {
+                    if (i < serviceIds.Count && !string.IsNullOrEmpty(serviceIds[i]))
+                    {
+                        string serviceId = serviceIds[i];
+                        
+                        // Lấy Production từ Services
+                        if (cnn.State != ConnectionState.Open)
+                        {
+                            cnn.Open();
+                        }
+                        string sqlServices = $"SELECT Production FROM Services WHERE id = '{serviceId}'";
+                        SqlCommand comServices = new SqlCommand(sqlServices, cnn);
+                        SqlDataAdapter daServices = new SqlDataAdapter(comServices);
+                        DataTable dtServices = new DataTable();
+                        daServices.Fill(dtServices);
+                        cnn.Close();
+
+                        if (dtServices != null && dtServices.Rows.Count > 0)
+                        {
+                            double production = 0;
+                            if (dtServices.Rows[0]["Production"] != null && dtServices.Rows[0]["Production"] != DBNull.Value)
+                            {
+                                double.TryParse(dtServices.Rows[0]["Production"].ToString(), out production);
+                            }
+
+                            if (production > 0 && i < quantities.Count && i < unitPrices.Count)
+                            {
+                                // quantity mới = Production * quantity hiện tại
+                                int quantityNew = (int)(production * quantities[i]);
+                                
+                                // unitPrice mới = unitPrice hiện tại / Production (không làm tròn)
+                                double unitPriceNew = unitPrices[i] / production;
+
+                                quantities[i] = quantityNew;
+                                unitPrices[i] = unitPriceNew;
+                                hasConverted = true;
+                            }
+                        }
+                    }
+                }
+
+                // Nếu có convert, update lại vào database
+                if (hasConverted)
+                {
+                    // Build arrays mới
+                    string newServiceIds = "[" + string.Join(",", serviceIds.Select(id => "\"" + id + "\"")) + "]";
+                    string newServiceNames = "[" + string.Join(",", serviceNames.Select(name => "\"" + name + "\"")) + "]";
+                    string newQuantities = "[" + string.Join(",", quantities.Select(q => q.ToString())) + "]";
+                    string newUnitPrices = "[" + string.Join(",", unitPrices.Select(p => p.ToString(System.Globalization.CultureInfo.InvariantCulture))) + "]";
+
+                    // Escape single quotes for SQL
+                    newServiceIds = newServiceIds.Replace("'", "''");
+                    newServiceNames = newServiceNames.Replace("'", "''");
+
+                    // Update vào database
+                    if (cnn.State != ConnectionState.Open)
+                    {
+                        cnn.Open();
+                    }
+                    string sqlUpdate = $@"UPDATE Orders_Viettel SET 
+                        ServiceIds = '{newServiceIds}',
+                        ServiceNames = '{newServiceNames}',
+                        ServiceQuantities = '{newQuantities}',
+                        UnitPrice = '{newUnitPrices}',
+                        IsConvertToLiter = 1
+                        WHERE id = '{orderId}'";
+                    SqlCommand comUpdate = new SqlCommand(sqlUpdate, cnn);
+                    comUpdate.ExecuteNonQuery();
+                    cnn.Close();
+
+                    return true;
+                }
+
+                return false;
+            }
+            catch (Exception ex)
+            {
+                log.Error($"Lỗi khi convert order {orderId}: {ex.Message}");
+                if (cnn.State == ConnectionState.Open)
+                    cnn.Close();
+                return false;
             }
         }
 
@@ -1561,20 +1761,41 @@ namespace InvoiceClient
 
                 string ids = string.Join(",", listIds); // Tạo string ids từ danh sách
 
-                // Kiểm tra IsConvertToLiter == true cho tất cả các orders đã chọn
+                // Tự động convert các orders chưa convert và lưu vào database
                 if (listIds.Count > 0)
                 {
+                    List<string> ordersToConvert = new List<string>();
                     cnn.Open();
                     string idsForSqlCheck = string.Join("','", listIds);
-                    string sqlCheck = $"SELECT COUNT(*) FROM Orders_Viettel WHERE id IN ('{idsForSqlCheck}') AND (IsConvertToLiter IS NULL OR IsConvertToLiter = 0)";
+                    string sqlCheck = $"SELECT id FROM Orders_Viettel WHERE id IN ('{idsForSqlCheck}') AND (IsConvertToLiter IS NULL OR IsConvertToLiter = 0)";
                     SqlCommand comCheck = new SqlCommand(sqlCheck, cnn);
-                    int countNotConverted = Convert.ToInt32(comCheck.ExecuteScalar());
+                    SqlDataReader reader = comCheck.ExecuteReader();
+                    while (reader.Read())
+                    {
+                        ordersToConvert.Add(reader["id"].ToString());
+                    }
+                    reader.Close();
                     cnn.Close();
 
-                    if (countNotConverted > 0)
+                    // Tự động convert các orders chưa convert
+                    if (ordersToConvert.Count > 0)
                     {
-                        MessageBox.Show("Các orders đã chọn phải được convert sang Liter trước khi lập nháp hóa đơn!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                        return;
+                        int convertedCount = 0;
+                        foreach (string orderId in ordersToConvert)
+                        {
+                            if (ConvertOrderToLiter(orderId))
+                            {
+                                convertedCount++;
+                            }
+                        }
+                        
+                        if (convertedCount > 0)
+                        {
+                            MessageBox.Show($"Đã tự động convert {convertedCount} order(s) sang Liter và lưu vào database!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                            // Refresh lại dữ liệu sau khi convert để đảm bảo dữ liệu mới nhất
+                            //Search();
+                            // Tiếp tục xử lý tạo hóa đơn nháp, không return
+                        }
                     }
                 }
 
@@ -1648,7 +1869,11 @@ namespace InvoiceClient
                 string sqlupdate = "update Orders_viettel set IsDraft=1 , hoadonnoibo ='"+ sohoadon_noibo + "' where id in ('" + idsForSql + "')";  // update tất cả các ID đã chọn
                 SqlCommand comupdate = new SqlCommand(sqlupdate, cnn); //bat dau truy van
                 comupdate.ExecuteNonQuery();
-
+                
+                //update table orders
+                string sqlupdate_orders = "update Orders set IsDraft=1 , hoadonnoibo ='" + sohoadon_noibo + "' where id in ('" + idsForSql + "')";  // update tất cả các ID đã chọn
+                SqlCommand comupdate_orders = new SqlCommand(sqlupdate_orders, cnn); //bat dau truy van
+                comupdate_orders.ExecuteNonQuery();
 
                 cnn.Close();  // đóng kết nối
                 // lay files da xuat ve

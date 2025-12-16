@@ -41,6 +41,7 @@ namespace InvoiceClient
             SetupDataGridView();
             btnAddItem.Text = "Thêm";
             editingIndex = -1;
+
         }
 
         private void LoadServices()
@@ -140,6 +141,12 @@ namespace InvoiceClient
 
                     RefreshDataGridView();
                     CalculateTotalPrice();
+                    
+                    // Tự động convert nếu order chưa được convert
+                    if (!IsConvertToLiterFromDB)
+                    {
+                        ConvertToLiter(false); // Tự động convert, không hiển thị message
+                    }
                 }
             }
             catch (Exception ex)
@@ -437,7 +444,7 @@ namespace InvoiceClient
                 
                 // Parse tax percent (may have comma as decimal separator)
                 string taxPercentText = txtTaxPercent.Text.Replace(",", ".").Trim();
-                double taxPercent = double.Parse(taxPercentText, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture);
+                int taxPercent = int.Parse(taxPercentText, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture);
 
                 // Escape single quotes for SQL
                 string customerName = txtCustomerName.Text.Replace("'", "''");
@@ -491,37 +498,45 @@ namespace InvoiceClient
             this.Close();
         }
 
-        private void btnConvertToLit_Click(object sender, EventArgs e)
+        private void ConvertToLiter(bool showMessage = true)
         {
             try
             {
                 if (orderItems.Count == 0)
                 {
-                    MessageBox.Show("Không có item nào để convert!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    if (showMessage)
+                    {
+                        MessageBox.Show("Không có item nào để convert!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    }
                     return;
                 }
-
 
                 // Kiểm tra xem order đã được convert sang Liter chưa (lấy từ database)
                 if (IsConvertToLiterFromDB)
                 {
-                    MessageBox.Show("Đã convert sang Liter rồi!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    if (showMessage)
+                    {
+                        MessageBox.Show("Đã convert sang Liter rồi!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    }
                     return;
                 }
 
-
-                DialogResult result = MessageBox.Show(
-                    "Bạn có chắc chắn muốn chuyển đổi tất cả items sang đơn vị Lít?\n" +
-                    "Quantity sẽ được nhân với Production và UnitPrice sẽ được chia cho Production.",
-                    "Xác nhận chuyển đổi",
-                    MessageBoxButtons.YesNo,
-                    MessageBoxIcon.Question,
-                    MessageBoxDefaultButton.Button2
-                );
-
-                if (result != DialogResult.Yes)
+                // Chỉ hiển thị message xác nhận nếu showMessage = true
+                if (showMessage)
                 {
-                    return;
+                    DialogResult result = MessageBox.Show(
+                        "Bạn có chắc chắn muốn chuyển đổi tất cả items sang đơn vị Lít?\n" +
+                        "Quantity sẽ được nhân với Production và UnitPrice sẽ được chia cho Production.",
+                        "Xác nhận chuyển đổi",
+                        MessageBoxButtons.YesNo,
+                        MessageBoxIcon.Question,
+                        MessageBoxDefaultButton.Button2
+                    );
+
+                    if (result != DialogResult.Yes)
+                    {
+                        return;
+                    }
                 }
 
                 bool hasError = false;
@@ -537,7 +552,10 @@ namespace InvoiceClient
                         }
 
                         // Lấy Production từ Services
-                        cnn.Open();
+                        if (cnn.State != ConnectionState.Open)
+                        {
+                            cnn.Open();
+                        }
                         string sqlServices = $"SELECT Production FROM Services WHERE id = '{item.ServiceId}'";
                         SqlCommand comServices = new SqlCommand(sqlServices, cnn);
                         SqlDataAdapter daServices = new SqlDataAdapter(comServices);
@@ -571,7 +589,10 @@ namespace InvoiceClient
                     catch (Exception ex)
                     {
                         hasError = true;
-                        MessageBox.Show($"Lỗi khi convert item '{item.ServiceName}': {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        if (showMessage)
+                        {
+                            MessageBox.Show($"Lỗi khi convert item '{item.ServiceName}': {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        }
                         if (cnn.State == ConnectionState.Open)
                             cnn.Close();
                     }
@@ -581,20 +602,31 @@ namespace InvoiceClient
                 {
                     RefreshDataGridView();
                     CalculateTotalPrice();
-                    MessageBox.Show($"Đã chuyển đổi thành công {convertedCount} item(s) sang đơn vị Lít!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    if (showMessage)
+                    {
+                        MessageBox.Show($"Đã chuyển đổi thành công {convertedCount} item(s) sang đơn vị Lít!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
                     IsConvertL = true;
                 }
-                else if (!hasError)
+                else if (!hasError && showMessage)
                 {
                     MessageBox.Show("Không có item nào được chuyển đổi. Vui lòng kiểm tra lại Production của các Services!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Lỗi khi chuyển đổi: " + ex.Message, "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                if (showMessage)
+                {
+                    MessageBox.Show("Lỗi khi chuyển đổi: " + ex.Message, "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
                 if (cnn.State == ConnectionState.Open)
                     cnn.Close();
             }
+        }
+
+        private void btnConvertToLit_Click(object sender, EventArgs e)
+        {
+            ConvertToLiter(true); // Gọi với showMessage = true để hiển thị message xác nhận
         }
     }
 }

@@ -222,6 +222,7 @@ namespace InvoiceClient
             this.btnConvertToLit.TabIndex = 4;
             this.btnConvertToLit.Text = "Convert To Lit";
             this.btnConvertToLit.UseVisualStyleBackColor = false;
+            this.btnConvertToLit.Visible = false;
             this.btnConvertToLit.Click += new System.EventHandler(this.btnConvertToLit_Click);
             // 
             // btnSave

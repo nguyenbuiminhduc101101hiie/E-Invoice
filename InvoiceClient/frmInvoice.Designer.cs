@@ -75,6 +75,7 @@
             this.label9 = new System.Windows.Forms.Label();
             this.chkchuyenL = new System.Windows.Forms.CheckBox();
             this.chkcanhan = new System.Windows.Forms.CheckBox();
+            this.chk_searchby_PaymentDate = new System.Windows.Forms.CheckBox();
             ((System.ComponentModel.ISupportInitialize)(this.dataGridView1)).BeginInit();
             this.contextMenuStrip1.SuspendLayout();
             this.tabControl1.SuspendLayout();
@@ -524,11 +525,22 @@
             this.chkcanhan.Text = "Xuất Cá Nhân";
             this.chkcanhan.UseVisualStyleBackColor = true;
             // 
+            // chk_searchby_PaymentDate
+            // 
+            this.chk_searchby_PaymentDate.AutoSize = true;
+            this.chk_searchby_PaymentDate.Location = new System.Drawing.Point(811, 18);
+            this.chk_searchby_PaymentDate.Name = "chk_searchby_PaymentDate";
+            this.chk_searchby_PaymentDate.Size = new System.Drawing.Size(141, 17);
+            this.chk_searchby_PaymentDate.TabIndex = 55;
+            this.chk_searchby_PaymentDate.Text = "Lấy Theo Payment Date";
+            this.chk_searchby_PaymentDate.UseVisualStyleBackColor = true;
+            // 
             // frmInvoice
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(1230, 586);
+            this.Controls.Add(this.chk_searchby_PaymentDate);
             this.Controls.Add(this.chkcanhan);
             this.Controls.Add(this.chkchuyenL);
             this.Controls.Add(this.txtinvseries);
@@ -629,6 +641,7 @@
         private System.Windows.Forms.Label label9;
         private System.Windows.Forms.CheckBox chkchuyenL;
         private System.Windows.Forms.CheckBox chkcanhan;
+        private System.Windows.Forms.CheckBox chk_searchby_PaymentDate;
     }
 }
 
