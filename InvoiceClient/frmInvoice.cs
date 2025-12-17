@@ -639,18 +639,18 @@ namespace InvoiceClient
                     if (tax == 0)
                     {
                         var result = MessageBox.Show(
-                            "VAT hiện đang là 0%. Bạn có muốn giữ nguyên 0% hay nhập lại giá trị VAT mới?",
+                            "VAT của đơn hiện là 0% , bạn có muốn sửa lại không ?",
                             "Xác nhận VAT",
                             MessageBoxButtons.YesNoCancel,
                             MessageBoxIcon.Question,
                             MessageBoxDefaultButton.Button2
                         );
 
-                        if (result == DialogResult.Yes)
+                        if (result == DialogResult.No)
                         {
                             tax = 0;
                         }
-                        else if (result == DialogResult.No)
+                        else if (result == DialogResult.Yes)
                         {
                             if (double.TryParse(txtvat.Text.Replace(',', '.'), out double newVat))
                             {
@@ -1719,7 +1719,7 @@ namespace InvoiceClient
                 string firstCustomerPhone = null;
                 string firstCustomerName = null;
                 bool isFirstRow = true;
-
+                string customername_invoiceno = null;
                 foreach (DataGridViewRow row in selectedRows)
                 {
 
@@ -1735,6 +1735,7 @@ namespace InvoiceClient
                     // Kiểm tra customerphone và customername
                     string customerPhone = row.Cells["CustomerPhone"]?.Value?.ToString()?.Trim() ?? "";
                     string customerName = row.Cells["CustomerName"]?.Value?.ToString()?.Trim() ?? "";
+                    customername_invoiceno = customerName.Trim();
                     string invoice_no_viettel = row.Cells["InvoiceNoViettel"]?.Value?.ToString()?.Trim() ?? "";
                     if (isFirstRow)
                     {
@@ -1800,7 +1801,7 @@ namespace InvoiceClient
                 }
 
                 // Hiển thị form nhập số hóa đơn nội bộ
-                frmInputInvoiceNo frmInput = new frmInputInvoiceNo();
+                frmInputInvoiceNo frmInput = new frmInputInvoiceNo(customername_invoiceno);
                 if (frmInput.ShowDialog() != DialogResult.OK)
                 {
                     return; // Người dùng hủy, không tiếp tục xử lý
@@ -1848,9 +1849,10 @@ namespace InvoiceClient
                 //txterror.Text = result;
                 int startIndex = result.IndexOf(@"fileName"":""") + ((@"""fileName"":""").Length);
                 int length = result.IndexOf(@""",""fileToBytes") - startIndex;
-                string fileName = sohoadon_noibo + "_" +
-                                DateTime.Now.Month + DateTime.Now.Day + DateTime.Now.Year +
-                                DateTime.Now.Hour + DateTime.Now.Minute + DateTime.Now.Second;
+                //string fileName = sohoadon_noibo + "_" +
+                //                DateTime.Now.Month + DateTime.Now.Day + DateTime.Now.Year +
+                //                DateTime.Now.Hour + DateTime.Now.Minute + DateTime.Now.Second;
+                string fileName = sohoadon_noibo;
                 string[] tach;
                 tach = result.Split(',');
                 string[] tachok;

@@ -9,10 +9,11 @@ namespace InvoiceClient
     {
         public string InvoiceNo { get; private set; }
         private SqlConnection cnn = new SqlConnection(@"Data Source=115.78.95.245;Initial Catalog=NPPBaoNgoc@;Integrated Security=false;user id=sa;password=qwerQWER1234!@#$");
-
-        public frmInputInvoiceNo()
+        public string CustomerName { get; private set; }
+        public frmInputInvoiceNo(string customerName)
         {
             InitializeComponent();
+            CustomerName = customerName;
         }
 
         private void btnOK_Click(object sender, EventArgs e)
@@ -39,7 +40,7 @@ namespace InvoiceClient
         {
             try
             {
-                // Tự động tạo số hóa đơn theo format yyyy-mm-dd-STT
+                // Tự động tạo số hóa đơn theo format yyMMdd_STT_CustomerName (STT tăng trong tháng)
                 string invoiceNo = GenerateInvoiceNo();
                 txtInvoiceNo.Text = invoiceNo;
                 txtInvoiceNo.SelectAll();
@@ -54,19 +55,21 @@ namespace InvoiceClient
 
         private string GenerateInvoiceNo()
         {
-            string today = DateTime.Now.ToString("yyyy-MM-dd");
+            string today = DateTime.Now.ToString("yyMMdd");
+            string monthPrefix = DateTime.Now.ToString("yyMM");
             int nextSTT = 1;
 
             try
             {
                 cnn.Open();
-                // Lấy tất cả các HoaDonNoiBo trong ngày hiện tại có format yyyy-mm-dd-STT
-                string sql = "SELECT HoaDonNoiBo FROM orders WHERE HoaDonNoiBo IS NOT NULL AND HoaDonNoiBo LIKE '" + today + "-%'";
+                // Lấy tất cả các HoaDonNoiBo trong tháng hiện tại có format yyMMdd_STT_CustomerName
+                string sql = "SELECT HoaDonNoiBo FROM orders WHERE HoaDonNoiBo IS NOT NULL AND HoaDonNoiBo LIKE '" + monthPrefix + "%'";
                 SqlCommand com = new SqlCommand(sql, cnn);
                 SqlDataReader reader = com.ExecuteReader();
 
                 int maxSTT = 0;
-                string pattern = @"^" + Regex.Escape(today) + @"-(\d+)$";
+                // Pattern để match format yyMMdd_STT_CustomerName, chỉ kiểm tra phần yyMM đầu tiên
+                string pattern = @"^" + Regex.Escape(monthPrefix) + @"\d{2}_(\d+)_";
 
                 while (reader.Read())
                 {
@@ -102,8 +105,8 @@ namespace InvoiceClient
                 throw new Exception("Lỗi khi truy vấn database: " + ex.Message);
             }
 
-            // Tạo số hóa đơn theo format yyyy-mm-dd-STT
-            return today + "-" + nextSTT.ToString();
+            // Tạo số hóa đơn theo format yyMMdd_STT_CustomerName (STT tăng trong tháng, reset về 1 khi sang tháng mới)
+            return today + "_" + nextSTT.ToString() + "_" + CustomerName;
         }
     }
 }
