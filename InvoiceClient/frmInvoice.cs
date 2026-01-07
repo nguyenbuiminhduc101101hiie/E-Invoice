@@ -10,6 +10,7 @@ using System.IO;
 using Newtonsoft.Json;
 using System.Web;
 using System.Net;
+using System.Net.Mail;
 using log4net;
 using System.Web.Script.Serialization;
 using System.Data.SqlClient;
@@ -1519,6 +1520,42 @@ namespace InvoiceClient
                 cnn.Close();  // đóng kết nối
 
                 MessageBox.Show("OK " + result);
+
+                // Lấy PDF và gửi email cho customer
+                try
+                {
+                    // Lấy thông tin customer từ dòng đầu tiên đã chọn
+                    string customerPhone = selectedRows[0].Cells["CustomerPhone"]?.Value?.ToString()?.Trim() ?? "";
+                    string customerName = selectedRows[0].Cells["CustomerName"]?.Value?.ToString()?.Trim() ?? "";
+                    
+                    // Lấy email của customer từ database
+                    string customerEmail = GetCustomerEmail(customerPhone, customerName);
+                    
+                    if (!string.IsNullOrEmpty(customerEmail))
+                    {
+                        // Lấy PDF file
+                        string pdfPath = GetInvoicePDF(sohoadon_vtel, txtmauso.Text);
+                        
+                        if (!string.IsNullOrEmpty(pdfPath) && File.Exists(pdfPath))
+                        {
+                            // Gửi email với PDF đính kèm
+                            SendInvoiceEmail(customerEmail, customerName, sohoadon_vtel, pdfPath);
+                        }
+                        else
+                        {
+                            MessageBox.Show("Không thể tải PDF hóa đơn để gửi email.", "Cảnh báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        }
+                    }
+                    else
+                    {
+                        MessageBox.Show("Customer chưa có email. Không thể gửi email hóa đơn.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
+                }
+                catch (Exception emailEx)
+                {
+                    log.Error($"Lỗi khi gửi email: {emailEx.Message}");
+                    MessageBox.Show($"Lỗi khi gửi email: {emailEx.Message}", "Cảnh báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
             }
             catch (Exception ex)
             {
@@ -1858,7 +1895,8 @@ namespace InvoiceClient
                 string[] tachok;
                 tachok = tach[2].Split(':');
                 string tachcuoi = tachok[1].Replace("\"", "");
-                using (System.IO.FileStream stream = System.IO.File.Create("c:\\temp\\" + fileName + ".pdf"))
+                string pdfPath = "c:\\temp\\" + fileName + ".pdf";
+                using (System.IO.FileStream stream = System.IO.File.Create(pdfPath))
                 {
                     System.Byte[] byteArray = System.Convert.FromBase64String(tachcuoi);
                     stream.Write(byteArray, 0, byteArray.Length);
@@ -1880,6 +1918,35 @@ namespace InvoiceClient
                 cnn.Close();  // đóng kết nối
                 // lay files da xuat ve
                 MessageBox.Show("OK " + result);
+
+                // Gửi email với PDF đính kèm cho customer
+                //try
+                //{
+                //    // Lấy email của customer từ database
+                //    string customerEmail = GetCustomerEmail(firstCustomerPhone, firstCustomerName);
+                    
+                //    if (!string.IsNullOrEmpty(customerEmail))
+                //    {
+                //        // Gửi email với PDF đính kèm
+                //        if (File.Exists(pdfPath))
+                //        {
+                //            SendInvoiceEmail(customerEmail, firstCustomerName, sohoadon_noibo, pdfPath);
+                //        }
+                //        else
+                //        {
+                //            MessageBox.Show("Không tìm thấy file PDF để gửi email.", "Cảnh báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                //        }
+                //    }
+                //    else
+                //    {
+                //        MessageBox.Show("Customer chưa có email. Không thể gửi email hóa đơn nháp.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                //    }
+                //}
+                //catch (Exception emailEx)
+                //{
+                //    log.Error($"Lỗi khi gửi email hóa đơn nháp: {emailEx.Message}");
+                //    MessageBox.Show($"Lỗi khi gửi email: {emailEx.Message}", "Cảnh báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                //}
 
             }
 
@@ -2125,6 +2192,150 @@ namespace InvoiceClient
             catch (Exception ex)
             {
                 MessageBox.Show("Lỗi khi mở form chỉnh sửa: " + ex.Message, "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private string GetCustomerEmail(string customerPhone, string customerName)
+        {
+            try
+            {
+                cnn.Open();
+                // Ưu tiên tìm theo phone trước
+                string sql = "";
+                SqlCommand com = null;
+                
+                if (!string.IsNullOrEmpty(customerPhone))
+                {
+                    sql = "SELECT Email FROM Customers WHERE phone = @phone AND Email IS NOT NULL AND Email != ''";
+                    com = new SqlCommand(sql, cnn);
+                    com.Parameters.AddWithValue("@phone", customerPhone);
+                }
+                else if (!string.IsNullOrEmpty(customerName))
+                {
+                    sql = "SELECT Email FROM Customers WHERE Name = @name AND Email IS NOT NULL AND Email != ''";
+                    com = new SqlCommand(sql, cnn);
+                    com.Parameters.AddWithValue("@name", customerName);
+                }
+                
+                if (com != null)
+                {
+                    object result = com.ExecuteScalar();
+                    cnn.Close();
+                    
+                    if (result != null && result != DBNull.Value)
+                    {
+                        return result.ToString().Trim();
+                    }
+                }
+                else
+                {
+                    cnn.Close();
+                }
+            }
+            catch (Exception ex)
+            {
+                log.Error($"Lỗi khi lấy email customer: {ex.Message}");
+                if (cnn.State == ConnectionState.Open)
+                    cnn.Close();
+            }
+            return "";
+        }
+
+        private string GetInvoicePDF(string invoiceNo, string templateCode)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(strAccessToken))
+                {
+                    log.Error("Chưa có Access Token để lấy PDF");
+                    return "";
+                }
+
+                string apiLink = urlAPI + @"/services/einvoiceapplication/api/InvoiceAPI/InvoiceUtilsWS/getInvoiceRepresentationFile";
+                string contentType = "application/json";
+                string request = getPDFExample(codeTax, invoiceNo, templateCode);
+
+                string result = CreateRequest.webRequestV2(apiLink, request, strAccessToken, "POST", contentType, proxy, port, ssl);
+
+                PDFFileResponse objFile = JsonConvert.DeserializeObject<PDFFileResponse>(result);
+                
+                if (objFile != null && objFile.fileToBytes != null && objFile.fileToBytes.Length > 0)
+                {
+                    string fileName = objFile.fileName ?? (invoiceNo + ".pdf");
+                    string path = "c:\\temp\\" + fileName;
+                    
+                    // Đảm bảo thư mục tồn tại
+                    Directory.CreateDirectory("c:\\temp\\");
+                    
+                    File.WriteAllBytes(path, objFile.fileToBytes);
+                    return path;
+                }
+            }
+            catch (Exception ex)
+            {
+                log.Error($"Lỗi khi lấy PDF: {ex.Message}");
+            }
+            return "";
+        }
+
+        private void SendInvoiceEmail(string toEmail, string customerName, string invoiceNo, string pdfPath)
+        {
+            try
+            {
+                // Lấy thông tin email từ config hoặc database
+                string smtpServer = ConfigurationManager.AppSettings["SmtpServer"] ?? "smtp.gmail.com";
+                int smtpPort = int.Parse(ConfigurationManager.AppSettings["SmtpPort"] ?? "587");
+                string smtpUser = ConfigurationManager.AppSettings["SmtpUser"] ?? "";
+                string smtpPassword = ConfigurationManager.AppSettings["SmtpPassword"] ?? "";
+                //string fromEmail = ConfigurationManager.AppSettings["FromEmail"] ?? smtpUser;
+                string fromEmail = smtpUser;
+
+                bool enableSsl = bool.Parse(ConfigurationManager.AppSettings["EnableSsl"] ?? "true");
+
+                if (string.IsNullOrEmpty(smtpUser) || string.IsNullOrEmpty(smtpPassword))
+                {
+                    MessageBox.Show("Chưa cấu hình thông tin SMTP để gửi email. Vui lòng kiểm tra App.config.", "Cảnh báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                using (MailMessage mail = new MailMessage())
+                {
+                    mail.From = new MailAddress(fromEmail);
+                    mail.To.Add(toEmail);
+                    mail.Subject = $"Hóa đơn điện tử - {invoiceNo}";
+                    mail.Body = $"Kính gửi {customerName},\n\n" +
+                               $"Chúng tôi gửi kèm hóa đơn điện tử số {invoiceNo}.\n\n" +
+                               $"Trân trọng cảm ơn!";
+                    mail.IsBodyHtml = false;
+
+                    // Đính kèm file PDF
+                    if (File.Exists(pdfPath))
+                    {
+                        Attachment attachment = new Attachment(pdfPath);
+                        mail.Attachments.Add(attachment);
+                    }
+
+                    // Bypass SSL certificate validation để tránh lỗi certificate
+                    System.Net.ServicePointManager.ServerCertificateValidationCallback =
+                        delegate (object s, System.Security.Cryptography.X509Certificates.X509Certificate certificate,
+                        System.Security.Cryptography.X509Certificates.X509Chain chain,
+                        System.Net.Security.SslPolicyErrors sslPolicyErrors)
+                        { return true; };
+
+                    using (SmtpClient smtp = new SmtpClient(smtpServer, smtpPort))
+                    {
+                        smtp.Credentials = new NetworkCredential(smtpUser, smtpPassword);
+                        smtp.EnableSsl = enableSsl;
+                        smtp.Send(mail);
+                    }
+                }
+
+                MessageBox.Show($"Đã gửi email hóa đơn đến {toEmail} thành công!", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                log.Error($"Lỗi khi gửi email: {ex.Message}");
+                throw;
             }
         }
 
