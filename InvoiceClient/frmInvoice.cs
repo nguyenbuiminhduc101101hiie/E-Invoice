@@ -69,27 +69,33 @@ namespace InvoiceClient
                 string paymentDatePattern = "\"paymentDate\":\"";
                 int patternLength = paymentDatePattern.Length; // 15 ký tự
                 
-                sql = "SELECT CustomerName As [Tên Quán],CustomerPhone as SĐT,CustomerAddress as [Địa Chỉ],ServiceNames as [Items],ServiceQuantities as [Số Lượng],UnitPrice as [Unit Price],TotalPrice as [Total Price],CreatedAt as [Created At],IsPaid,DeliveryStatus as [Delivery Status],IsDraft,InvoiceNoViettel as [Invoice No Viettel] ,PaymentHistory,* FROM Orders_viettel " +
-                      "WHERE PaymentHistory IS NOT NULL " +
-                      "AND PaymentHistory != '' " +
-                      "AND PaymentHistory != '[]' " +
-                      "AND CHARINDEX('" + paymentDatePattern + "', PaymentHistory) > 0 " +
+                sql = "SELECT c.Name As [Tên Quán],o.CustomerPhone as SĐT,o.CustomerAddress as [Địa Chỉ],o.ServiceNames as [Items],o.ServiceQuantities as [Số Lượng],o.promotionquantities as [Số Lượng Khuyến Mãi],o.UnitPrice as [Unit Price],o.TotalPrice as [Total Price],o.CreatedAt as [Created At],o.IsPaid,o.DeliveryStatus as [Delivery Status],o.IsDraft,o.InvoiceNoViettel as [Invoice No Viettel],o.PaymentHistory," +
+                      "c.TaxCode as [Mã Số Thuế],c.Identification as [CCCD/CMND],CASE WHEN c.Identification IS NOT NULL AND c.Identification != '' THEN c.CustomerName ELSE NULL END as [Tên Cá Nhân],c.InvoiceName as [Tên Đơn Vị],c.InvoiceAddress as [Địa Chỉ Invoice],o.* " +
+                      "FROM Orders_viettel o " +
+                      "LEFT JOIN Customers c ON o.CustomerPhone = c.phone " +
+                      "WHERE o.PaymentHistory IS NOT NULL " +
+                      "AND o.PaymentHistory != '' " +
+                      "AND o.PaymentHistory != '[]' " +
+                      "AND CHARINDEX('" + paymentDatePattern + "', o.PaymentHistory) > 0 " +
                       // Extract 10 ký tự sau "paymentDate":" (chỉ phần ngày yyyy-MM-dd, bỏ phần giờ T16:38:37.875)
-                      "AND SUBSTRING(PaymentHistory, CHARINDEX('" + paymentDatePattern + "', PaymentHistory) + " + patternLength + ", 10) >= '" + startDateStr + "' " +
-                      "AND SUBSTRING(PaymentHistory, CHARINDEX('" + paymentDatePattern + "', PaymentHistory) + " + patternLength + ", 10) <= '" + endDateStr + "' " +
-                      "AND CustomerPhone LIKE N'%" + txtcustomerphone.Text + "%' " +
-                      "AND CustomerName LIKE N'%" + cusname + "%' " +
-                      "AND EmployeeNames LIKE N'%" + Employname + "%'";
+                      "AND SUBSTRING(o.PaymentHistory, CHARINDEX('" + paymentDatePattern + "', o.PaymentHistory) + " + patternLength + ", 10) >= '" + startDateStr + "' " +
+                      "AND SUBSTRING(o.PaymentHistory, CHARINDEX('" + paymentDatePattern + "', o.PaymentHistory) + " + patternLength + ", 10) <= '" + endDateStr + "' " +
+                      "AND o.CustomerPhone LIKE N'%" + txtcustomerphone.Text + "%' " +
+                      "AND o.CustomerName LIKE N'%" + cusname + "%' " +
+                      "AND o.EmployeeNames LIKE N'%" + Employname + "%'";
             }
             else
             {
-                sql = "SELECT CustomerName As [Tên Quán],CustomerPhone as SĐT,CustomerAddress as [Địa Chỉ],ServiceNames as [Items],ServiceQuantities as [Số Lượng],UnitPrice as [Unit Price],TotalPrice as [Total Price],CreatedAt as [Created At],IsPaid,DeliveryStatus as [Delivery Status],IsDraft,InvoiceNoViettel as [Invoice No Viettel] ,* FROM Orders_viettel " +
-                   "WHERE CAST(createdat AS date) BETWEEN '" +
-                   dateTimePicker1.Value.ToString("yyyy-MM-dd") + "' AND '" +
-                   dateTimePicker2.Value.ToString("yyyy-MM-dd") + "' " +
-                   "AND CustomerPhone LIKE N'%" + txtcustomerphone.Text + "%' " +
-                   "AND CustomerName LIKE N'%" + cusname + "%' " +
-                   "AND EmployeeNames LIKE N'%" + Employname + "%'";
+                sql = "SELECT c.Name As [Tên Quán],o.CustomerPhone as SĐT,o.CustomerAddress as [Địa Chỉ],o.ServiceNames as [Items],o.ServiceQuantities as [Số Lượng],o.promotionquantities as [Số Lượng Khuyến Mãi],o.UnitPrice as [Unit Price],o.TotalPrice as [Total Price],o.CreatedAt as [Created At],o.IsPaid,o.DeliveryStatus as [Delivery Status],o.IsDraft,o.InvoiceNoViettel as [Invoice No Viettel]," +
+                      "c.TaxCode as [Mã Số Thuế],c.Identification as [CCCD/CMND],CASE WHEN c.Identification IS NOT NULL AND c.Identification != '' THEN c.CustomerName ELSE NULL END as [Tên Cá Nhân],c.InvoiceName as [Tên Đơn Vị],c.InvoiceAddress as [Địa Chỉ Invoice],o.* " +
+                      "FROM Orders_viettel o " +
+                      "LEFT JOIN Customers c ON o.CustomerPhone = c.phone " +
+                      "WHERE CAST(o.createdat AS date) BETWEEN '" +
+                      dateTimePicker1.Value.ToString("yyyy-MM-dd") + "' AND '" +
+                      dateTimePicker2.Value.ToString("yyyy-MM-dd") + "' " +
+                      "AND o.CustomerPhone LIKE N'%" + txtcustomerphone.Text + "%' " +
+                      "AND o.CustomerName LIKE N'%" + cusname + "%' " +
+                      "AND o.EmployeeNames LIKE N'%" + Employname + "%'";
 
             }
 
@@ -115,34 +121,49 @@ namespace InvoiceClient
                 dataGridView1.Columns.Insert(0, checkBoxColumn);
             }
             
-            // Ẩn toàn bộ trước (trừ cột Select)
+            // Set HeaderText cho các cột (tên cột trong DataTable đã là alias từ SQL)
+            // Các cột có alias sẽ tự động có tên là alias, các cột không có alias giữ nguyên tên gốc
             foreach (DataGridViewColumn col in dataGridView1.Columns)
             {
                 if (col.Name != "Select")
                 {
+                    // Set HeaderText = tên cột (đã là alias nếu có trong SQL)
+                    col.HeaderText = col.Name;
                     col.Visible = false;
                 }
             }
-
-            // Chỉ hiển thị các cột cần thiết
-            dataGridView1.Columns["CustomerName"].Visible = true;
-            dataGridView1.Columns["CustomerPhone"].Visible = true;
-            dataGridView1.Columns["CustomerAddress"].Visible = true;
-            dataGridView1.Columns["ServiceNames"].Visible = true;
-            dataGridView1.Columns["ServiceQuantities"].Visible = true;
             
+            // Chỉ hiển thị các cột cần thiết (dùng tên alias từ SQL)
+            // Thiết lập thứ tự hiển thị các cột (bắt đầu từ 1 vì cột Select ở index 0)
+            int displayIndex = 1;
+            
+            SetColumnVisibleAndOrder("Tên Quán", true, displayIndex++);
+            SetColumnVisibleAndOrder("Mã Số Thuế", true, displayIndex++);
+            SetColumnVisibleAndOrder("CCCD/CMND", true, displayIndex++);
+            SetColumnVisibleAndOrder("Tên Cá Nhân", true, displayIndex++);
+            SetColumnVisibleAndOrder("Tên Đơn Vị", true, displayIndex++);
+            SetColumnVisibleAndOrder("Địa Chỉ Invoice", true, displayIndex++);
+            
+            SetColumnVisible("SĐT", false);
+            SetColumnVisible("Địa Chỉ", false);
+            SetColumnVisible("Items", false);
+            SetColumnVisible("Số Lượng", false);
+            SetColumnVisible("Số Lượng Khuyến Mãi", false);
+
             // Format UnitPrice với dấu phẩy phân cách hàng nghìn, giữ nguyên số thập phân
             // Vì UnitPrice là nvarchar (mảng) nên cần format trong CellFormatting event
-            if (dataGridView1.Columns["UnitPrice"] != null)
+            DataGridViewColumn unitPriceCol = GetColumn("Unit Price");
+            if (unitPriceCol != null)
             {
-                dataGridView1.Columns["UnitPrice"].Visible = true;
+                unitPriceCol.Visible = false;
             }
             
             // Format TotalPrice với dấu phẩy phân cách hàng nghìn, giữ nguyên số thập phân
-            if (dataGridView1.Columns["TotalPrice"] != null)
+            DataGridViewColumn totalPriceCol = GetColumn("Total Price");
+            if (totalPriceCol != null)
             {
-                dataGridView1.Columns["TotalPrice"].Visible = true;
-                dataGridView1.Columns["TotalPrice"].DefaultCellStyle = new DataGridViewCellStyle
+                totalPriceCol.Visible = true;
+                totalPriceCol.DefaultCellStyle = new DataGridViewCellStyle
                 {
                     Format = "#,##0.################################################################",
                     FormatProvider = System.Globalization.CultureInfo.InvariantCulture
@@ -153,11 +174,11 @@ namespace InvoiceClient
             dataGridView1.CellFormatting -= dataGridView1_CellFormatting;
             dataGridView1.CellFormatting += dataGridView1_CellFormatting;
             
-            dataGridView1.Columns["CreatedAt"].Visible = true;
-            dataGridView1.Columns["IsPaid"].Visible = true;
-            dataGridView1.Columns["DeliveryStatus"].Visible = true;
-            dataGridView1.Columns["IsDraft"].Visible = true;
-            dataGridView1.Columns["InvoiceNoViettel"].Visible = true;
+            SetColumnVisible("Created At", true);
+            SetColumnVisible("IsPaid", true);
+            SetColumnVisible("DeliveryStatus", true);
+            SetColumnVisible("IsDraft", true);
+            SetColumnVisible("Invoice No Viettel", true);
             
             // Đảm bảo cột Select luôn hiển thị
             if (dataGridView1.Columns.Contains("Select"))
@@ -166,8 +187,23 @@ namespace InvoiceClient
             }
             
             // Đặt màu vàng nhạt cho các dòng có IsConvertToLiter == false
+            // Và ẩn giá trị trong cột "Tên Cá Nhân" nếu CCCD/CMND không có data
             foreach (DataGridViewRow row in dataGridView1.Rows)
             {
+                // Kiểm tra và ẩn giá trị trong cột "Tên Cá Nhân" nếu CCCD/CMND rỗng
+                if (row.Cells["CCCD/CMND"] != null)
+                {
+                    string cccdValue = row.Cells["CCCD/CMND"].Value?.ToString()?.Trim() ?? "";
+                    if (string.IsNullOrEmpty(cccdValue))
+                    {
+                        // Nếu CCCD/CMND rỗng, ẩn giá trị trong cột "Tên Cá Nhân"
+                        if (row.Cells["Tên Cá Nhân"] != null)
+                        {
+                            row.Cells["Tên Cá Nhân"].Value = "";
+                        }
+                    }
+                }
+
                 if (row.Cells["id"] != null && row.Cells["id"].Value != null)
                 {
                     string orderId = row.Cells["id"].Value.ToString().Trim();
@@ -212,6 +248,69 @@ namespace InvoiceClient
             }
             
             cnn.Close();  // đóng kết nối
+        }
+
+        private void SetColumnVisible(string columnName, bool visible)
+        {
+            DataGridViewColumn col = GetColumn(columnName);
+            if (col != null)
+            {
+                col.Visible = visible;
+            }
+        }
+
+        private void SetColumnVisibleAndOrder(string columnName, bool visible, int displayIndex)
+        {
+            DataGridViewColumn col = GetColumn(columnName);
+            if (col != null)
+            {
+                col.Visible = visible;
+                col.DisplayIndex = displayIndex;
+            }
+        }
+
+        private DataGridViewColumn GetColumn(string columnName)
+        {
+            // Tìm cột theo tên alias hoặc tên gốc
+            if (dataGridView1.Columns.Contains(columnName))
+            {
+                return dataGridView1.Columns[columnName];
+            }
+            
+            // Nếu không tìm thấy, có thể cột có tên gốc, thử tìm trong mapping
+            Dictionary<string, string> columnMapping = new Dictionary<string, string>
+            {
+                { "CustomerName", "Tên Quán" },
+                { "TaxCode", "Mã Số Thuế" },
+                { "Identification", "CCCD/CMND" },
+                { "InvoiceName", "Tên Đơn Vị" },
+                { "InvoiceAddress", "Địa Chỉ Invoice" },
+                { "CustomerPhone", "SĐT" },
+                { "CustomerAddress", "Địa Chỉ" },
+           
+                { "ServiceNames", "Items" },
+                { "ServiceQuantities", "Số Lượng" },
+                { "promotionquantities", "Số Lượng Khuyến Mãi" },
+                { "UnitPrice", "Unit Price" },
+                { "TotalPrice", "Total Price" },
+                { "CreatedAt", "Created At" },
+                { "InvoiceNoViettel", "Invoice No Viettel" }
+            };
+            
+            // Tìm trong mapping
+            foreach (var kvp in columnMapping)
+            {
+                if (kvp.Value == columnName && dataGridView1.Columns.Contains(kvp.Value))
+                {
+                    return dataGridView1.Columns[kvp.Value];
+                }
+                if (kvp.Key == columnName && dataGridView1.Columns.Contains(kvp.Key))
+                {
+                    return dataGridView1.Columns[kvp.Key];
+                }
+            }
+            
+            return null;
         }
 
         public frmInvoice()
@@ -696,47 +795,36 @@ namespace InvoiceClient
                     MainCode = dscus.Tables[0].Rows[0]["Code"].ToString();
                     TaxCode = dscus.Tables[0].Rows[0]["TaxCode"].ToString();
 
-                    if (string.IsNullOrEmpty(TaxCode))
+                    if (!string.IsNullOrEmpty(TaxCode))
                     {
-                        MessageBox.Show("Customer chưa có Tax Code !", "Cảnh báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                       
+                        chkcanhan.Checked = false;
+                        //HotenBuyer = dscus.Tables[0].Rows[0]["invoicename"]?.ToString() ?? "";
+                        Company = dscus.Tables[0].Rows[0]["invoicename"]?.ToString() ?? "";
                     }
-                   
-                    if (!string.IsNullOrEmpty(dscus.Tables[0].Rows[0]["InvoiceName"].ToString()))
+                    else if(!string.IsNullOrEmpty(dscus.Tables[0].Rows[0]["Identification"].ToString()))
                     {
-                        Company = dscus.Tables[0].Rows[0]["InvoiceName"].ToString();
+                        chkcanhan.Checked = true;
+                        HotenBuyer = dscus.Tables[0].Rows[0]["CustomerName"]?.ToString() ?? "";
+                        //Company = "";
                     }
                     else
                     {
-                        if (!string.IsNullOrEmpty(dscus.Tables[0].Rows[0]["Name"].ToString()))
-                        {
-                            Company = dscus.Tables[0].Rows[0]["Name"].ToString();
-                        }
-                        else
-                        {
-                            MessageBox.Show("Nhập Name cho customer !", "Vui thử lại", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                            return "";
-                        }
-                            
+                        chkcanhan.Checked = false;
+                        //HotenBuyer = dscus.Tables[0].Rows[0]["CustomerName"]?.ToString() ?? "";
+                        Company = dscus.Tables[0].Rows[0]["Name"]?.ToString() ?? "";
                     }
 
-                    if (!string.IsNullOrEmpty(dscus.Tables[0].Rows[0]["InvoiceAddress"].ToString()))
+                    if (chkcanhan.Checked == false)
                     {
-                        Address = dscus.Tables[0].Rows[0]["InvoiceAddress"].ToString();
-                    }
-                    else
-                    {
-                        if (!string.IsNullOrEmpty(dscus.Tables[0].Rows[0]["Address"].ToString()))
+                        if (string.IsNullOrEmpty(TaxCode))
                         {
-                            Address = dscus.Tables[0].Rows[0]["Address"].ToString();
+                            MessageBox.Show("Customer chưa có Tax Code !", "Cảnh báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+
                         }
-                        else
-                        {
-                            MessageBox.Show("Nhập Address cho customer !", "Vui thử lại", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                            return "";
-                        }
-                        
                     }
+
+                    Address = dscus.Tables[0].Rows[0]["InvoiceAddress"].ToString();
+            
 
                     if (chkcanhan.Checked == true) 
                     {
@@ -751,11 +839,7 @@ namespace InvoiceClient
                         }
                     }
 
-                    
-                    HotenBuyer = dscus.Tables[0].Rows[0]["CustomerName"]?.ToString() ?? "";
-                    //Type = dscus.Tables[0].Rows[0]["Type"].ToString();
                     Tel = dscus.Tables[0].Rows[0]["phone"].ToString();
-                    //Email = dscus.Tables[0].Rows[0]["Email"].ToString();
                     buyerName_ = dscus.Tables[0].Rows[0]["Name"].ToString();
                 }
             }
@@ -854,10 +938,12 @@ namespace InvoiceClient
                     // ===== TÁCH CHUỖI SERVICEID & QUANTITY =====
                     string servicesRaw = ds.Tables[0].Rows[i]["ServiceIds"]?.ToString()?.Trim() ?? "";
                     string quantitiesRaw = ds.Tables[0].Rows[i]["ServiceQuantities"]?.ToString()?.Trim() ?? "";
+                    string promotionQuantitiesRaw = ds.Tables[0].Rows[i]["promotionquantities"]?.ToString()?.Trim() ?? "";
                     string UnitPriceRaw = ds.Tables[0].Rows[i]["UnitPrice"]?.ToString()?.Trim() ?? "";
                     // Loại bỏ ký tự [ ] và "
                     servicesRaw = servicesRaw.Replace("[", "").Replace("]", "").Replace("\"", "");
                     quantitiesRaw = quantitiesRaw.Replace("[", "").Replace("]", "");
+                    promotionQuantitiesRaw = promotionQuantitiesRaw.Replace("[", "").Replace("]", "");
                     UnitPriceRaw = UnitPriceRaw.Replace("[", "").Replace("]", "");
                     // Tách mảng
                     var serviceIds = servicesRaw.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
@@ -867,6 +953,10 @@ namespace InvoiceClient
                     var quantities = quantitiesRaw.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
                                                   .Select(x => int.TryParse(x.Trim(), out var val) ? val : 0)
                                                   .ToList();
+
+                    var promotionQuantities = promotionQuantitiesRaw.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                                                                    .Select(x => int.TryParse(x.Trim(), out var val) ? val : 0)
+                                                                    .ToList();
 
                     var UnitPrices = UnitPriceRaw
                      .Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
@@ -905,8 +995,16 @@ namespace InvoiceClient
                             if (dsservices.Tables[0].Rows.Count > 0)
                             {
                                 item.itemCode = dsservices.Tables[0].Rows[0]["Code"].ToString();
-                                item.itemName = dsservices.Tables[0].Rows[0]["Name"].ToString();
-                                item.unitName = "Lít"; // Mặc định là "L" (Lít)
+                               item.itemName = dsservices.Tables[0].Rows[0]["Name"].ToString();
+                                if (dsservices.Tables[0].Rows[0]["Production"].ToString() == "0.00")
+                                {
+                                    item.unitName = dsservices.Tables[0].Rows[0]["Unit"].ToString();
+                                }
+                                else
+                                {
+                                    item.unitName = "Lít";
+                                }    
+                                // Mặc định là "L" (Lít)
                                 //// Kiểm tra checkbox chkchuyenL
                                 //if (chkchuyenL.Checked)
                                 //{
@@ -923,6 +1021,16 @@ namespace InvoiceClient
                         double itemTax = Convert.ToDouble(ds.Tables[0].Rows[i]["TaxPercent"]);
                         double unitPrice = Convert.ToDouble(UnitPrices[j]);
                         int quantity = Convert.ToInt32(quantities[j]);
+                        
+                        // Tính quantity thực (ActualQuantity = Quantity - PromotionQuantity)
+                        int promotionQuantity = j < promotionQuantities.Count ? promotionQuantities[j] : 0;
+                        int actualQuantity = quantity - promotionQuantity; // Quantity thực để tính tiền
+                        
+                        // Nếu actualQuantity = 0 (khuyến mãi), bỏ qua item này, không gửi lên Viettel
+                        if (actualQuantity == 0)
+                        {
+                            continue; // Skip item này, không thêm vào lstItem
+                        }
                         
                         // Nếu checkbox chkchuyenL được tick, tính lại quantity và unitPrice
                         //if (chkchuyenL.Checked && dsservices != null && dsservices.Tables[0].Rows.Count > 0)
@@ -947,9 +1055,9 @@ namespace InvoiceClient
                         //    }
                         //}
 
-                        // Tính tiền trước thuế
+                        // Tính tiền trước thuế - SỬ DỤNG ACTUALQUANTITY (Quantity thực = Quantity - PromotionQuantity)
                         //double amountWithoutTax = unitPrice * quantity ; 
-                        double amountWithoutTax = Math.Round(unitPrice, 0, MidpointRounding.AwayFromZero) * quantity;
+                        double amountWithoutTax = Math.Round(unitPrice, 0, MidpointRounding.AwayFromZero) * actualQuantity;
                         // Tính tiền thuế - sử dụng tax riêng của từng order
                         double taxAmount =( amountWithoutTax  - (amountWithoutTax * (double.Parse(item.discount) / 100))) * (itemTax / 100);
 
@@ -965,10 +1073,10 @@ namespace InvoiceClient
                         //item.taxPercentage = ds.Tables[0].Rows[i]["TaxPercent"].ToString(); 
                         item.taxPercentage = Convert.ToInt32(ds.Tables[0].Rows[i]["TaxPercent"]).ToString();
 
-                        // Sử dụng unitPrice và quantity đã được tính toán (có thể đã thay đổi nếu chkchuyenL.Checked)
+                        // Sử dụng unitPrice và actualQuantity (Quantity thực = Quantity - PromotionQuantity)
                         item.unitPrice = Math.Round(unitPrice, 0, MidpointRounding.AwayFromZero).ToString();
 
-                        item.quantity = quantity.ToString();
+                        item.quantity = actualQuantity.ToString(); // Sử dụng ActualQuantity (Quantity thực) thay vì Quantity gốc
                         item.itemDiscount = "0"; 
 
                         sumTotalAmountWithoutTax += double.Parse(item.itemTotalAmountWithoutTax) ;

@@ -524,6 +524,7 @@
             this.chkcanhan.TabIndex = 53;
             this.chkcanhan.Text = "Xuất Cá Nhân";
             this.chkcanhan.UseVisualStyleBackColor = true;
+            this.chkcanhan.Visible = false;
             // 
             // chk_searchby_PaymentDate
             // 

@@ -21,10 +21,12 @@ namespace InvoiceClient
             public string ServiceId { get; set; }
             public string ServiceName { get; set; }
             public int Quantity { get; set; }
+            public int PromotionQuantity { get; set; }
             public double UnitPrice { get; set; }
             public bool IsConvertToLiter { get; set; } = false;
 
-
+            // Số lượng chính xác để tính tiền = Quantity - PromotionQuantity
+            public int ActualQuantity => Quantity - PromotionQuantity;
         }
 
         public frmEditOrder(string orderId)
@@ -87,7 +89,7 @@ namespace InvoiceClient
                     txtCustomerPhone.Text = row["CustomerPhone"]?.ToString() ?? "";
                     txtCustomerAddress.Text = row["CustomerAddress"]?.ToString() ?? "";
                     txtTaxPercent.Text = row["TaxPercent"]?.ToString() ?? "0";
-                    txtTotalPrice.Text = row["TotalPrice"]?.ToString() ?? "0";
+                    // Không set txtTotalPrice từ database, sẽ được tính lại theo ActualQuantity trong CalculateTotalPrice()
 
                     // Load IsConvertToLiter từ database Orders_Viettel
                     if (row["IsConvertToLiter"] != null && row["IsConvertToLiter"] != DBNull.Value)
@@ -103,12 +105,14 @@ namespace InvoiceClient
                     string serviceIdsRaw = row["ServiceIds"]?.ToString()?.Trim() ?? "";
                     string serviceNamesRaw = row["ServiceNames"]?.ToString()?.Trim() ?? "";
                     string quantitiesRaw = row["ServiceQuantities"]?.ToString()?.Trim() ?? "";
+                    string promotionQuantitiesRaw = row["promotionquantities"]?.ToString()?.Trim() ?? "";
                     string unitPricesRaw = row["UnitPrice"]?.ToString()?.Trim() ?? "";
 
                     // Remove brackets and quotes
                     serviceIdsRaw = serviceIdsRaw.Replace("[", "").Replace("]", "").Replace("\"", "");
                     serviceNamesRaw = serviceNamesRaw.Replace("[", "").Replace("]", "").Replace("\"", "");
                     quantitiesRaw = quantitiesRaw.Replace("[", "").Replace("]", "");
+                    promotionQuantitiesRaw = promotionQuantitiesRaw.Replace("[", "").Replace("]", "");
                     unitPricesRaw = unitPricesRaw.Replace("[", "").Replace("]", "");
 
                     // Split arrays
@@ -121,13 +125,16 @@ namespace InvoiceClient
                     var quantities = quantitiesRaw.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
                                                   .Select(x => int.TryParse(x.Trim(), out var val) ? val : 0)
                                                   .ToList();
+                    var promotionQuantities = promotionQuantitiesRaw.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                                                                    .Select(x => int.TryParse(x.Trim(), out var val) ? val : 0)
+                                                                    .ToList();
                     var unitPrices = unitPricesRaw.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
                                                   .Select(x => double.TryParse(x.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var val) ? val : 0)
                                                   .ToList();
 
                     // Create order items
                     orderItems.Clear();
-                    int maxCount = Math.Max(Math.Max(serviceIds.Count, serviceNames.Count), Math.Max(quantities.Count, unitPrices.Count));
+                    int maxCount = Math.Max(Math.Max(Math.Max(serviceIds.Count, serviceNames.Count), Math.Max(quantities.Count, promotionQuantities.Count)), unitPrices.Count);
                     for (int i = 0; i < maxCount; i++)
                     {
                         orderItems.Add(new OrderItem
@@ -135,6 +142,7 @@ namespace InvoiceClient
                             ServiceId = i < serviceIds.Count ? serviceIds[i] : "",
                             ServiceName = i < serviceNames.Count ? serviceNames[i] : "",
                             Quantity = i < quantities.Count ? quantities[i] : 0,
+                            PromotionQuantity = i < promotionQuantities.Count ? promotionQuantities[i] : 0,
                             UnitPrice = i < unitPrices.Count ? unitPrices[i] : 0
                         });
                     }
@@ -185,6 +193,32 @@ namespace InvoiceClient
 
             dgvItems.Columns.Add(new DataGridViewTextBoxColumn
             {
+                Name = "PromotionQuantity",
+                HeaderText = "Số lượng khuyến mãi",
+                DataPropertyName = "PromotionQuantity",
+                Width = 120,
+                DefaultCellStyle = new DataGridViewCellStyle 
+                { 
+                    Format = "#,##0",
+                    FormatProvider = System.Globalization.CultureInfo.InvariantCulture
+                }
+            });
+
+            dgvItems.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "ActualQuantity",
+                HeaderText = "Số lượng thực",
+                DataPropertyName = "ActualQuantity",
+                Width = 100,
+                DefaultCellStyle = new DataGridViewCellStyle 
+                { 
+                    Format = "#,##0",
+                    FormatProvider = System.Globalization.CultureInfo.InvariantCulture
+                }
+            });
+
+            dgvItems.Columns.Add(new DataGridViewTextBoxColumn
+            {
                 Name = "UnitPrice",
                 HeaderText = "Đơn giá",
                 DataPropertyName = "UnitPrice",
@@ -217,8 +251,10 @@ namespace InvoiceClient
             {
                 ServiceName = item.ServiceName,
                 Quantity = item.Quantity,
+                PromotionQuantity = item.PromotionQuantity,
+                ActualQuantity = item.ActualQuantity,
                 UnitPrice = item.UnitPrice,
-                Total = item.Quantity * item.UnitPrice
+                Total = item.ActualQuantity * item.UnitPrice
             }).ToList();
 
             bindingSource.DataSource = displayItems;
@@ -400,13 +436,17 @@ namespace InvoiceClient
 
         private void CalculateTotalPrice()
         {
-            // Tính tổng tiền từ orderItems (sử dụng Quantity và UnitPrice mới nhất sau khi convert)
+            // Tính tổng tiền từ orderItems
+            // QUAN TRỌNG: Sử dụng ActualQuantity (Quantity thực = Quantity - PromotionQuantity) để tính tiền
+            // ActualQuantity là số lượng thực tế phải trả tiền (đã trừ số lượng khuyến mãi)
             // Sum() không làm tròn, nhưng double có giới hạn độ chính xác (~15-17 chữ số)
             // Tính toán chính xác từng item để tránh tích lũy sai số
             double totalWithoutTax = 0;
             foreach (var item in orderItems)
             {
-                totalWithoutTax += item.Quantity * item.UnitPrice;
+                // Tính theo Quantity thực (ActualQuantity = Quantity - PromotionQuantity)
+                int actualQty = item.ActualQuantity; // Quantity thực = Quantity - PromotionQuantity
+                totalWithoutTax += actualQty * item.UnitPrice;
             }
             
             double taxPercent = 0;
@@ -419,6 +459,7 @@ namespace InvoiceClient
             double totalWithTax = totalWithoutTax + taxAmount;
 
             // Format với dấu phẩy phân cách hàng nghìn nhưng vẫn giữ nguyên số thập phân không giới hạn
+            // txtTotalPrice được tính theo Quantity thực (ActualQuantity)
             txtTotalPrice.Text = totalWithTax.ToString("#,##0.################################################################", System.Globalization.CultureInfo.InvariantCulture);
         }
 
@@ -436,6 +477,7 @@ namespace InvoiceClient
                 string serviceIds = "[" + string.Join(",", orderItems.Select(item => "\"" + item.ServiceId + "\"")) + "]";
                 string serviceNames = "[" + string.Join(",", orderItems.Select(item => "\"" + item.ServiceName + "\"")) + "]";
                 string quantities = "[" + string.Join(",", orderItems.Select(item => item.Quantity.ToString())) + "]";
+                string promotionQuantities = "[" + string.Join(",", orderItems.Select(item => item.PromotionQuantity.ToString())) + "]";
                 string unitPrices = "[" + string.Join(",", orderItems.Select(item => item.UnitPrice.ToString(System.Globalization.CultureInfo.InvariantCulture))) + "]";
 
                 // Remove thousand separators (commas) before parsing
@@ -461,6 +503,7 @@ namespace InvoiceClient
                     ServiceIds = '{serviceIds}',
                     ServiceNames = '{serviceNames}',
                     ServiceQuantities = '{quantities}',
+                    promotionquantities = '{promotionQuantities}',
                     UnitPrice = '{unitPrices}',
                     TaxPercent = {taxPercent},
                     TotalPrice = {totalPrice}
@@ -575,11 +618,15 @@ namespace InvoiceClient
                             {
                                 // quantity mới = Production * quantity hiện tại
                                 int quantityNew = (int)(production * item.Quantity);
+                                
+                                // promotionQuantity mới = Production * promotionQuantity hiện tại
+                                int promotionQuantityNew = (int)(production * item.PromotionQuantity);
 
                                 // unitPrice mới = unitPrice hiện tại / Production (không làm tròn)
                                 double unitPriceNew = item.UnitPrice / production;
 
                                 item.Quantity = quantityNew;
+                                item.PromotionQuantity = promotionQuantityNew;
                                 item.UnitPrice = unitPriceNew;
                                 item.IsConvertToLiter = true; // Đánh dấu đã convert sang Liter
                                 convertedCount++;
