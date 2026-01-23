@@ -72,7 +72,7 @@ namespace InvoiceClient
                 sql = "SELECT c.Name As [Tên Quán],o.CustomerPhone as SĐT,o.CustomerAddress as [Địa Chỉ],o.ServiceNames as [Items],o.ServiceQuantities as [Số Lượng],o.promotionquantities as [Số Lượng Khuyến Mãi],o.UnitPrice as [Unit Price],o.TotalPrice as [Total Price],o.CreatedAt as [Created At],o.IsPaid,o.DeliveryStatus as [Delivery Status],o.IsDraft,o.InvoiceNoViettel as [Invoice No Viettel],o.PaymentHistory," +
                       "c.TaxCode as [Mã Số Thuế],c.Identification as [CCCD/CMND],CASE WHEN c.Identification IS NOT NULL AND c.Identification != '' THEN c.CustomerName ELSE NULL END as [Tên Cá Nhân],c.InvoiceName as [Tên Đơn Vị],c.InvoiceAddress as [Địa Chỉ Invoice],o.* " +
                       "FROM Orders_viettel o " +
-                      "LEFT JOIN Customers c ON o.CustomerPhone = c.phone " +
+                      "LEFT JOIN Customers c ON o.CustomerName = c.Name " +
                       "WHERE o.PaymentHistory IS NOT NULL " +
                       "AND o.PaymentHistory != '' " +
                       "AND o.PaymentHistory != '[]' " +
@@ -89,7 +89,7 @@ namespace InvoiceClient
                 sql = "SELECT c.Name As [Tên Quán],o.CustomerPhone as SĐT,o.CustomerAddress as [Địa Chỉ],o.ServiceNames as [Items],o.ServiceQuantities as [Số Lượng],o.promotionquantities as [Số Lượng Khuyến Mãi],o.UnitPrice as [Unit Price],o.TotalPrice as [Total Price],o.CreatedAt as [Created At],o.IsPaid,o.DeliveryStatus as [Delivery Status],o.IsDraft,o.InvoiceNoViettel as [Invoice No Viettel]," +
                       "c.TaxCode as [Mã Số Thuế],c.Identification as [CCCD/CMND],CASE WHEN c.Identification IS NOT NULL AND c.Identification != '' THEN c.CustomerName ELSE NULL END as [Tên Cá Nhân],c.InvoiceName as [Tên Đơn Vị],c.InvoiceAddress as [Địa Chỉ Invoice],o.* " +
                       "FROM Orders_viettel o " +
-                      "LEFT JOIN Customers c ON o.CustomerPhone = c.phone " +
+                      "LEFT JOIN Customers c ON o.CustomerName = c.Name " +
                       "WHERE CAST(o.createdat AS date) BETWEEN '" +
                       dateTimePicker1.Value.ToString("yyyy-MM-dd") + "' AND '" +
                       dateTimePicker2.Value.ToString("yyyy-MM-dd") + "' " +
@@ -1004,16 +1004,7 @@ namespace InvoiceClient
                                 {
                                     item.unitName = "Lít";
                                 }    
-                                // Mặc định là "L" (Lít)
-                                //// Kiểm tra checkbox chkchuyenL
-                                //if (chkchuyenL.Checked)
-                                //{
-                                //    item.unitName = "Lít"; // Mặc định là "L" (Lít)
-                                //}
-                                //else
-                                //{
-                                //    item.unitName = dsservices.Tables[0].Rows[0]["Unit"].ToString();
-                                //}
+                            
                             }
                         }
 
@@ -1027,32 +1018,12 @@ namespace InvoiceClient
                         int actualQuantity = quantity - promotionQuantity; // Quantity thực để tính tiền
                         
                         // Nếu actualQuantity = 0 (khuyến mãi), bỏ qua item này, không gửi lên Viettel
-                        if (actualQuantity == 0)
-                        {
-                            continue; // Skip item này, không thêm vào lstItem
-                        }
-                        
-                        // Nếu checkbox chkchuyenL được tick, tính lại quantity và unitPrice
-                        //if (chkchuyenL.Checked && dsservices != null && dsservices.Tables[0].Rows.Count > 0)
+                        //if (actualQuantity == 0)
                         //{
-                        //    // Lấy Production từ Services
-                        //    double production = 0;
-                        //    if (dsservices.Tables[0].Rows[0]["Production"] != null && dsservices.Tables[0].Rows[0]["Production"] != DBNull.Value)
-                        //    {
-                        //        double.TryParse(dsservices.Tables[0].Rows[0]["Production"].ToString(), out production);
-                        //    }
-                            
-                        //    if (production > 0)
-                        //    {
-                        //        // quantity mới = Production * quantities[j]
-                        //        int quantityNew = (int)(production * quantity);
-                                
-                        //        // unitPrice mới = unitPrice hiện tại / Production
-                        //        double unitPriceNew = unitPrice / production;
-                                
-                        //        quantity = quantityNew;
-                        //        unitPrice = unitPriceNew;
-                        //    }
+                        //    continue; // Skip item này, không thêm vào lstItem
+                        //}
+                        
+                
                         //}
 
                         // Tính tiền trước thuế - SỬ DỤNG ACTUALQUANTITY (Quantity thực = Quantity - PromotionQuantity)
@@ -1680,7 +1651,7 @@ namespace InvoiceClient
                 {
                     cnn.Open();
                 }
-                string sql = $"SELECT ServiceIds, ServiceNames, ServiceQuantities, UnitPrice FROM Orders_Viettel WHERE id = '{orderId}'";
+                string sql = $"SELECT ServiceIds, ServiceNames, ServiceQuantities, promotionquantities, UnitPrice FROM Orders_Viettel WHERE id = '{orderId}'";
                 SqlCommand com = new SqlCommand(sql, cnn);
                 SqlDataAdapter da = new SqlDataAdapter(com);
                 DataTable dt = new DataTable();
@@ -1698,12 +1669,14 @@ namespace InvoiceClient
                 string serviceIdsRaw = row["ServiceIds"]?.ToString()?.Trim() ?? "";
                 string serviceNamesRaw = row["ServiceNames"]?.ToString()?.Trim() ?? "";
                 string quantitiesRaw = row["ServiceQuantities"]?.ToString()?.Trim() ?? "";
+                string promotionQuantitiesRaw = row["promotionquantities"]?.ToString()?.Trim() ?? "";
                 string unitPricesRaw = row["UnitPrice"]?.ToString()?.Trim() ?? "";
 
                 // Remove brackets and quotes
                 serviceIdsRaw = serviceIdsRaw.Replace("[", "").Replace("]", "").Replace("\"", "");
                 serviceNamesRaw = serviceNamesRaw.Replace("[", "").Replace("]", "").Replace("\"", "");
                 quantitiesRaw = quantitiesRaw.Replace("[", "").Replace("]", "");
+                promotionQuantitiesRaw = promotionQuantitiesRaw.Replace("[", "").Replace("]", "");
                 unitPricesRaw = unitPricesRaw.Replace("[", "").Replace("]", "");
 
                 // Split arrays
@@ -1716,13 +1689,16 @@ namespace InvoiceClient
                 var quantities = quantitiesRaw.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
                                               .Select(x => int.TryParse(x.Trim(), out var val) ? val : 0)
                                               .ToList();
+                var promotionQuantities = promotionQuantitiesRaw.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                                                                .Select(x => int.TryParse(x.Trim(), out var val) ? val : 0)
+                                                                .ToList();
                 var unitPrices = unitPricesRaw.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
                                               .Select(x => double.TryParse(x.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var val) ? val : 0)
                                               .ToList();
 
                 // Convert từng item sang Liter
                 bool hasConverted = false;
-                int maxCount = Math.Max(Math.Max(serviceIds.Count, serviceNames.Count), Math.Max(quantities.Count, unitPrices.Count));
+                int maxCount = Math.Max(Math.Max(Math.Max(serviceIds.Count, serviceNames.Count), Math.Max(quantities.Count, promotionQuantities.Count)), unitPrices.Count);
                 
                 for (int i = 0; i < maxCount; i++)
                 {
@@ -1750,15 +1726,32 @@ namespace InvoiceClient
                                 double.TryParse(dtServices.Rows[0]["Production"].ToString(), out production);
                             }
 
+                            // Chỉ convert khi Production > 0, nếu Production = 0 hoặc null thì giữ nguyên
                             if (production > 0 && i < quantities.Count && i < unitPrices.Count)
                             {
                                 // quantity mới = Production * quantity hiện tại
                                 int quantityNew = (int)(production * quantities[i]);
                                 
+                                // promotionQuantity mới = Production * promotionQuantity hiện tại
+                                int promotionQuantityNew = i < promotionQuantities.Count ? (int)(production * promotionQuantities[i]) : 0;
+                                
                                 // unitPrice mới = unitPrice hiện tại / Production (không làm tròn)
                                 double unitPriceNew = unitPrices[i] / production;
 
                                 quantities[i] = quantityNew;
+                                if (i < promotionQuantities.Count)
+                                {
+                                    promotionQuantities[i] = promotionQuantityNew;
+                                }
+                                else if (promotionQuantityNew > 0)
+                                {
+                                    // Nếu promotionQuantities chưa có phần tử tại index i, thêm vào
+                                    while (promotionQuantities.Count <= i)
+                                    {
+                                        promotionQuantities.Add(0);
+                                    }
+                                    promotionQuantities[i] = promotionQuantityNew;
+                                }
                                 unitPrices[i] = unitPriceNew;
                                 hasConverted = true;
                             }
@@ -1773,6 +1766,7 @@ namespace InvoiceClient
                     string newServiceIds = "[" + string.Join(",", serviceIds.Select(id => "\"" + id + "\"")) + "]";
                     string newServiceNames = "[" + string.Join(",", serviceNames.Select(name => "\"" + name + "\"")) + "]";
                     string newQuantities = "[" + string.Join(",", quantities.Select(q => q.ToString())) + "]";
+                    string newPromotionQuantities = "[" + string.Join(",", promotionQuantities.Select(q => q.ToString())) + "]";
                     string newUnitPrices = "[" + string.Join(",", unitPrices.Select(p => p.ToString(System.Globalization.CultureInfo.InvariantCulture))) + "]";
 
                     // Escape single quotes for SQL
@@ -1788,6 +1782,7 @@ namespace InvoiceClient
                         ServiceIds = '{newServiceIds}',
                         ServiceNames = '{newServiceNames}',
                         ServiceQuantities = '{newQuantities}',
+                        promotionquantities = '{newPromotionQuantities}',
                         UnitPrice = '{newUnitPrices}',
                         IsConvertToLiter = 1
                         WHERE id = '{orderId}'";
