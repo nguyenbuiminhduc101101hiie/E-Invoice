@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -69,7 +69,7 @@ namespace InvoiceClient
                 string paymentDatePattern = "\"paymentDate\":\"";
                 int patternLength = paymentDatePattern.Length; // 15 ký tự
                 
-                sql = "SELECT c.Name As [Tên Quán],o.CustomerPhone as SĐT,o.CustomerAddress as [Địa Chỉ],o.ServiceNames as [Items],o.ServiceQuantities as [Số Lượng],o.promotionquantities as [Số Lượng Khuyến Mãi],o.UnitPrice as [Unit Price],o.TotalPrice as [Total Price],o.CreatedAt as [Created At],o.IsPaid,o.DeliveryStatus as [Delivery Status],o.IsDraft,o.InvoiceNoViettel as [Invoice No Viettel],o.PaymentHistory," +
+                sql = "SELECT c.Name As [Tên Quán],o.CustomerPhone as SĐT,o.CustomerAddress as [Địa Chỉ],o.ServiceNames as [Items],o.ServiceQuantities as [Số Lượng],o.promotionquantities as [Số Lượng Khuyến Mãi],o.UnitPrice as [Unit Price],o.TotalPrice as [Total Price],o.Cashamount as [Cash Amount],o.Transferamount as [Transfer Amount],o.CreatedAt as [Created At],o.IsPaid,o.DeliveryStatus as [Delivery Status],o.IsDraft,o.InvoiceNoViettel as [Invoice No Viettel],o.PaymentHistory," +
                       "c.TaxCode as [Mã Số Thuế],c.Identification as [CCCD/CMND],CASE WHEN c.Identification IS NOT NULL AND c.Identification != '' THEN c.CustomerName ELSE NULL END as [Tên Cá Nhân],c.InvoiceName as [Tên Đơn Vị],c.InvoiceAddress as [Địa Chỉ Invoice],o.* " +
                       "FROM Orders_viettel o " +
                       "LEFT JOIN Customers c ON o.CustomerName = c.Name " +
@@ -86,7 +86,7 @@ namespace InvoiceClient
             }
             else
             {
-                sql = "SELECT c.Name As [Tên Quán],o.CustomerPhone as SĐT,o.CustomerAddress as [Địa Chỉ],o.ServiceNames as [Items],o.ServiceQuantities as [Số Lượng],o.promotionquantities as [Số Lượng Khuyến Mãi],o.UnitPrice as [Unit Price],o.TotalPrice as [Total Price],o.CreatedAt as [Created At],o.IsPaid,o.DeliveryStatus as [Delivery Status],o.IsDraft,o.InvoiceNoViettel as [Invoice No Viettel]," +
+                sql = "SELECT c.Name As [Tên Quán],o.CustomerPhone as SĐT,o.CustomerAddress as [Địa Chỉ],o.ServiceNames as [Items],o.ServiceQuantities as [Số Lượng],o.promotionquantities as [Số Lượng Khuyến Mãi],o.UnitPrice as [Unit Price],o.TotalPrice as [Total Price],o.Cashamount as [Cash Amount],o.Transferamount as [Transfer Amount],o.CreatedAt as [Created At],o.IsPaid,o.DeliveryStatus as [Delivery Status],o.IsDraft,o.InvoiceNoViettel as [Invoice No Viettel]," +
                       "c.TaxCode as [Mã Số Thuế],c.Identification as [CCCD/CMND],CASE WHEN c.Identification IS NOT NULL AND c.Identification != '' THEN c.CustomerName ELSE NULL END as [Tên Cá Nhân],c.InvoiceName as [Tên Đơn Vị],c.InvoiceAddress as [Địa Chỉ Invoice],o.* " +
                       "FROM Orders_viettel o " +
                       "LEFT JOIN Customers c ON o.CustomerName = c.Name " +
@@ -168,6 +168,20 @@ namespace InvoiceClient
                     Format = "#,##0.################################################################",
                     FormatProvider = System.Globalization.CultureInfo.InvariantCulture
                 };
+
+                DataGridViewColumn cashAmountCol = GetColumn("Cash Amount");
+                if (cashAmountCol != null)
+                {
+                    cashAmountCol.Visible = true;
+                    cashAmountCol.DisplayIndex = totalPriceCol.DisplayIndex + 1;
+                }
+
+                DataGridViewColumn transferAmountCol = GetColumn("Transfer Amount");
+                if (transferAmountCol != null)
+                {
+                    transferAmountCol.Visible = true;
+                    transferAmountCol.DisplayIndex = totalPriceCol.DisplayIndex + 2;
+                }
             }
             
             // Đăng ký event CellFormatting để format UnitPrice (mảng nvarchar)
@@ -293,6 +307,8 @@ namespace InvoiceClient
                 { "promotionquantities", "Số Lượng Khuyến Mãi" },
                 { "UnitPrice", "Unit Price" },
                 { "TotalPrice", "Total Price" },
+                { "Cashamount", "Cashamount" },
+                { "Transferamount", "Transferamount" },
                 { "CreatedAt", "Created At" },
                 { "InvoiceNoViettel", "Invoice No Viettel" }
             };
@@ -926,7 +942,7 @@ namespace InvoiceClient
                 }
             }
 
-           
+            string note = "";
             //Item info
             double sumTotalTaxAmount = 0, sumTotalAmountWithoutTax = 0, totalamountwithtax = 0, totaltax = 0,totaldiscount =0;
             List<ItemInfo> lstItem = new List<ItemInfo>();
@@ -1016,16 +1032,8 @@ namespace InvoiceClient
                         // Tính quantity thực (ActualQuantity = Quantity - PromotionQuantity)
                         int promotionQuantity = j < promotionQuantities.Count ? promotionQuantities[j] : 0;
                         int actualQuantity = quantity - promotionQuantity; // Quantity thực để tính tiền
-                        
-                        // Nếu actualQuantity = 0 (khuyến mãi), bỏ qua item này, không gửi lên Viettel
-                        //if (actualQuantity == 0)
-                        //{
-                        //    continue; // Skip item này, không thêm vào lstItem
-                        //}
-                        
-                
-                        //}
-
+     
+            
                         // Tính tiền trước thuế - SỬ DỤNG ACTUALQUANTITY (Quantity thực = Quantity - PromotionQuantity)
                         //double amountWithoutTax = unitPrice * quantity ; 
                         double amountWithoutTax = Math.Round(unitPrice, 0, MidpointRounding.AwayFromZero) * actualQuantity;
@@ -1054,6 +1062,12 @@ namespace InvoiceClient
                         totalamountwithtax += amountWithTax ;
                         totaltax += double.Parse(item.taxAmount);
                         totaldiscount += discount;
+                        if (actualQuantity == 0)
+                        {
+                            item.unitPrice = "0";
+                            note = "Hàng KM";
+                            item.itemName += " (Hàng KM)";
+                        }
                         lstItem.Add(item);
                         stt++; // Tăng stt cho item tiếp theo
                     }
@@ -1101,14 +1115,13 @@ namespace InvoiceClient
                    @""",       ""templateCode"":""" + objInvoice.templateCode +
                    @""", 	""invoiceSeries"":""" + objInvoice.invoiceSeries +
                    @""",       ""transactionUuid"": """ + objInvoice.uuId +
-                   @""",       ""invoiceIssuedDate"":" + objInvoice.invoiceIssuedDate +
+                   @""",       ""invoiceIssuedDate"":" + objInvoice.invoiceIssuedDate +   
                    @",       ""currencyCode"":""" + objInvoice.currencyCode + @""", 
                     ""adjustmentType"":""" + objInvoice.adjustmentType + @""",  
                     ""paymentStatus"":" + objInvoice.paymentStatus + @",
                     ""paymentTypeName"": """ + objInvoice.paymentType + @""",
                     ""cusGetInvoiceRight"":" + objInvoice.cusGetInvoiceRight + @",      
                     ""buyerIdNo"":""" + objInvoice.buyerIdNo + @""",        
-
                     ""buyerIdType"":""" + objInvoice.buyerIdType + @"""    },    
                     ""buyerInfo"":{              
                     ""buyerLegalName"":""" + objBuyer.buyerLegalName + @""",  
@@ -1117,7 +1130,7 @@ namespace InvoiceClient
                     ""buyerAddressLine"":""" + objBuyer.buyerAddressLine + @""",       
                     ""buyerPhoneNumber"":""" + objBuyer.buyerPhoneNumber + @""",      
                     ""buyerEmail"":""" + objBuyer.buyerEmail + @""",      
-                    ""buyerIdNo"":""" + objBuyer.buyerIdNo + @""",        
+                    ""buyerIdNo"":""" + objBuyer.buyerIdNo + @""",   
                     ""buyerIdType"":""" + objBuyer.buyerIdType + @"""    },
                     ""payments"":[  {""paymentMethodName"":""" + objInvoice.paymentType + @"""    }    ],    
                     ""deliveryInfo"":{     },
@@ -1129,7 +1142,6 @@ namespace InvoiceClient
                 str += @"{""lineNumber"":" + indexItem + @",          
                     ""itemCode"":""" + itemInfo.itemCode + @""",    
                     ""itemName"":""" + itemInfo.itemName.Replace("\r", "  ").Trim() + @""",
-                    ""itemNote"":""" + "xxx" + @""",
                     ""unitName"":""" + itemInfo.unitName + @""",     
                     ""unitPrice"":" + itemInfo.unitPrice + @",             
                     ""quantity"":" + itemInfo.quantity + @",               
@@ -1137,7 +1149,6 @@ namespace InvoiceClient
                     ""taxPercentage"":" + itemInfo.taxPercentage + @",              
                     ""taxAmount"":" + itemInfo.taxAmount + @",              
                     ""discount"":" + itemInfo.discount + @",  
-                    
                     ""itemDiscount"":" + itemInfo.itemDiscount;
 
                 // ✅ Chỉ thêm specialInfo nếu có giá trị
