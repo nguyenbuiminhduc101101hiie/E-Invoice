@@ -69,7 +69,7 @@ namespace InvoiceClient
                 string paymentDatePattern = "\"paymentDate\":\"";
                 int patternLength = paymentDatePattern.Length; // 15 ký tự
                 
-                sql = "SELECT c.Name As [Tên Quán],o.CustomerPhone as SĐT,o.CustomerAddress as [Địa Chỉ],o.ServiceNames as [Items],o.ServiceQuantities as [Số Lượng],o.promotionquantities as [Số Lượng Khuyến Mãi],o.UnitPrice as [Unit Price],o.TotalPrice as [Total Price],o.Cashamount as [Cash Amount],o.Transferamount as [Transfer Amount],o.CreatedAt as [Created At],o.IsPaid,o.DeliveryStatus as [Delivery Status],o.IsDraft,o.InvoiceNoViettel as [Invoice No Viettel],o.PaymentHistory," +
+                sql = "SELECT c.Name As [Tên Quán],o.CustomerPhone as SĐT,o.CustomerAddress as [Địa Chỉ],o.ServiceNames as [Items],o.ServiceQuantities as [Số Lượng],o.promotionquantities as [Số Lượng Khuyến Mãi],o.UnitPrice as [Unit Price],o.TotalPrice as [Total Price],o.Cashamount as [Cash Amount],o.Transferamount as [Transfer Amount],o.CreatedAt as [Created At],o.IsPaid as [Is Paid],o.PaymentStatus as [Payment Status],o.DeliveryStatus as [Delivery Status],o.IsDraft,o.InvoiceNoViettel as [Invoice No Viettel],o.PaymentHistory," +
                       "c.TaxCode as [Mã Số Thuế],c.Identification as [CCCD/CMND],CASE WHEN c.Identification IS NOT NULL AND c.Identification != '' THEN c.CustomerName ELSE NULL END as [Tên Cá Nhân],c.InvoiceName as [Tên Đơn Vị],c.InvoiceAddress as [Địa Chỉ Invoice],o.* " +
                       "FROM Orders_viettel o " +
                       "LEFT JOIN Customers c ON o.CustomerName = c.Name " +
@@ -86,7 +86,7 @@ namespace InvoiceClient
             }
             else
             {
-                sql = "SELECT c.Name As [Tên Quán],o.CustomerPhone as SĐT,o.CustomerAddress as [Địa Chỉ],o.ServiceNames as [Items],o.ServiceQuantities as [Số Lượng],o.promotionquantities as [Số Lượng Khuyến Mãi],o.UnitPrice as [Unit Price],o.TotalPrice as [Total Price],o.Cashamount as [Cash Amount],o.Transferamount as [Transfer Amount],o.CreatedAt as [Created At],o.IsPaid,o.DeliveryStatus as [Delivery Status],o.IsDraft,o.InvoiceNoViettel as [Invoice No Viettel]," +
+                sql = "SELECT c.Name As [Tên Quán],o.CustomerPhone as SĐT,o.CustomerAddress as [Địa Chỉ],o.ServiceNames as [Items],o.ServiceQuantities as [Số Lượng],o.promotionquantities as [Số Lượng Khuyến Mãi],o.UnitPrice as [Unit Price],o.TotalPrice as [Total Price],o.Cashamount as [Cash Amount],o.Transferamount as [Transfer Amount],o.CreatedAt as [Created At],o.IsPaid as [Is Paid],o.PaymentStatus as [Payment Status],o.DeliveryStatus as [Delivery Status],o.IsDraft,o.InvoiceNoViettel as [Invoice No Viettel]," +
                       "c.TaxCode as [Mã Số Thuế],c.Identification as [CCCD/CMND],CASE WHEN c.Identification IS NOT NULL AND c.Identification != '' THEN c.CustomerName ELSE NULL END as [Tên Cá Nhân],c.InvoiceName as [Tên Đơn Vị],c.InvoiceAddress as [Địa Chỉ Invoice],o.* " +
                       "FROM Orders_viettel o " +
                       "LEFT JOIN Customers c ON o.CustomerName = c.Name " +
@@ -199,10 +199,23 @@ namespace InvoiceClient
             dataGridView1.CellFormatting += dataGridView1_CellFormatting;
             
             SetColumnVisible("Created At", true);
-            SetColumnVisible("IsPaid", true);
+            SetColumnVisible("Is Paid", true);
+            SetColumnVisible("Payment Status", true);
             SetColumnVisible("DeliveryStatus", true);
             SetColumnVisible("IsDraft", true);
             SetColumnVisible("Invoice No Viettel", true);
+
+            DataGridViewColumn isPaidCol = GetColumn("Is Paid");
+            DataGridViewColumn paymentStatusCol = GetColumn("Payment Status");
+            if (isPaidCol != null && paymentStatusCol != null)
+            {
+                isPaidCol.ReadOnly = true;
+                paymentStatusCol.DisplayIndex = isPaidCol.DisplayIndex + 1;
+            }
+            else if (isPaidCol != null)
+            {
+                isPaidCol.ReadOnly = true;
+            }
             
             // Đảm bảo cột Select luôn hiển thị
             if (dataGridView1.Columns.Contains("Select"))
@@ -320,6 +333,8 @@ namespace InvoiceClient
                 { "Cashamount", "Cash Amount" },
                 { "Transferamount", "Transfer Amount" },
                 { "CreatedAt", "Created At" },
+                { "IsPaid", "Is Paid" },
+                { "PaymentStatus", "Payment Status" },
                 { "InvoiceNoViettel", "Invoice No Viettel" }
             };
             
