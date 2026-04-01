@@ -174,6 +174,11 @@ namespace InvoiceClient
                 {
                     cashAmountCol.Visible = true;
                     cashAmountCol.DisplayIndex = totalPriceCol.DisplayIndex + 1;
+                    cashAmountCol.DefaultCellStyle = new DataGridViewCellStyle
+                    {
+                        Format = "#,##0.################################################################",
+                        FormatProvider = System.Globalization.CultureInfo.InvariantCulture
+                    };
                 }
 
                 DataGridViewColumn transferAmountCol = GetColumn("Transfer Amount");
@@ -181,6 +186,11 @@ namespace InvoiceClient
                 {
                     transferAmountCol.Visible = true;
                     transferAmountCol.DisplayIndex = totalPriceCol.DisplayIndex + 2;
+                    transferAmountCol.DefaultCellStyle = new DataGridViewCellStyle
+                    {
+                        Format = "#,##0.################################################################",
+                        FormatProvider = System.Globalization.CultureInfo.InvariantCulture
+                    };
                 }
             }
             
@@ -307,8 +317,8 @@ namespace InvoiceClient
                 { "promotionquantities", "Số Lượng Khuyến Mãi" },
                 { "UnitPrice", "Unit Price" },
                 { "TotalPrice", "Total Price" },
-                { "Cashamount", "Cashamount" },
-                { "Transferamount", "Transferamount" },
+                { "Cashamount", "Cash Amount" },
+                { "Transferamount", "Transfer Amount" },
                 { "CreatedAt", "Created At" },
                 { "InvoiceNoViettel", "Invoice No Viettel" }
             };
