@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -8,6 +8,7 @@ using System.Windows.Forms;
 using System.Configuration;
 using System.IO;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System.Web;
 using System.Net;
 using System.Net.Mail;
@@ -69,7 +70,7 @@ namespace InvoiceClient
                 string paymentDatePattern = "\"paymentDate\":\"";
                 int patternLength = paymentDatePattern.Length; // 15 ký tự
                 
-                sql = "SELECT c.Name As [Tên Quán],o.CustomerPhone as SĐT,o.CustomerAddress as [Địa Chỉ],o.ServiceNames as [Items],o.ServiceQuantities as [Số Lượng],o.promotionquantities as [Số Lượng Khuyến Mãi],o.UnitPrice as [Unit Price],o.TotalPrice as [Total Price],o.Cashamount as [Cash Amount],o.Transferamount as [Transfer Amount],o.CreatedAt as [Created At],o.IsPaid as [Is Paid],o.PaymentStatus as [Payment Status],o.DeliveryStatus as [Delivery Status],o.IsDraft,o.InvoiceNoViettel as [Invoice No Viettel],o.PaymentHistory," +
+                sql = "SELECT c.Name As [Tên Quán],o.CustomerPhone as SĐT,o.CustomerAddress as [Địa Chỉ],o.ServiceNames as [Items],o.ServiceQuantities as [Số Lượng],o.promotionquantities as [Số Lượng Khuyến Mãi],o.UnitPrice as [Unit Price],o.TotalPrice as [Total Price],o.Cashamount as [Cash Amount],o.Transferamount as [Transfer Amount],o.CreatedAt as [Created At],o.PaymentStatus as [Payment Status],o.DeliveryStatus as [Delivery Status],o.IsDraft,o.InvoiceNoViettel as [Invoice No Viettel],o.PaymentHistory," +
                       "c.TaxCode as [Mã Số Thuế],c.Identification as [CCCD/CMND],CASE WHEN c.Identification IS NOT NULL AND c.Identification != '' THEN c.CustomerName ELSE NULL END as [Tên Cá Nhân],c.InvoiceName as [Tên Đơn Vị],c.InvoiceAddress as [Địa Chỉ Invoice],o.* " +
                       "FROM Orders_viettel o " +
                       "LEFT JOIN Customers c ON o.CustomerName = c.Name " +
@@ -86,7 +87,7 @@ namespace InvoiceClient
             }
             else
             {
-                sql = "SELECT c.Name As [Tên Quán],o.CustomerPhone as SĐT,o.CustomerAddress as [Địa Chỉ],o.ServiceNames as [Items],o.ServiceQuantities as [Số Lượng],o.promotionquantities as [Số Lượng Khuyến Mãi],o.UnitPrice as [Unit Price],o.TotalPrice as [Total Price],o.Cashamount as [Cash Amount],o.Transferamount as [Transfer Amount],o.CreatedAt as [Created At],o.IsPaid as [Is Paid],o.PaymentStatus as [Payment Status],o.DeliveryStatus as [Delivery Status],o.IsDraft,o.InvoiceNoViettel as [Invoice No Viettel]," +
+                sql = "SELECT c.Name As [Tên Quán],o.CustomerPhone as SĐT,o.CustomerAddress as [Địa Chỉ],o.ServiceNames as [Items],o.ServiceQuantities as [Số Lượng],o.promotionquantities as [Số Lượng Khuyến Mãi],o.UnitPrice as [Unit Price],o.TotalPrice as [Total Price],o.Cashamount as [Cash Amount],o.Transferamount as [Transfer Amount],o.CreatedAt as [Created At],o.PaymentStatus as [Payment Status],o.DeliveryStatus as [Delivery Status],o.IsDraft,o.InvoiceNoViettel as [Invoice No Viettel]," +
                       "c.TaxCode as [Mã Số Thuế],c.Identification as [CCCD/CMND],CASE WHEN c.Identification IS NOT NULL AND c.Identification != '' THEN c.CustomerName ELSE NULL END as [Tên Cá Nhân],c.InvoiceName as [Tên Đơn Vị],c.InvoiceAddress as [Địa Chỉ Invoice],o.* " +
                       "FROM Orders_viettel o " +
                       "LEFT JOIN Customers c ON o.CustomerName = c.Name " +
@@ -136,7 +137,8 @@ namespace InvoiceClient
             // Chỉ hiển thị các cột cần thiết (dùng tên alias từ SQL)
             // Thiết lập thứ tự hiển thị các cột (bắt đầu từ 1 vì cột Select ở index 0)
             int displayIndex = 1;
-            
+
+            SetColumnVisibleAndOrder("IsDraft", true, displayIndex++);
             SetColumnVisibleAndOrder("Tên Quán", true, displayIndex++);
             SetColumnVisibleAndOrder("Mã Số Thuế", true, displayIndex++);
             SetColumnVisibleAndOrder("CCCD/CMND", true, displayIndex++);
@@ -199,23 +201,9 @@ namespace InvoiceClient
             dataGridView1.CellFormatting += dataGridView1_CellFormatting;
             
             SetColumnVisible("Created At", true);
-            SetColumnVisible("Is Paid", true);
             SetColumnVisible("Payment Status", true);
             SetColumnVisible("DeliveryStatus", true);
-            SetColumnVisible("IsDraft", true);
             SetColumnVisible("Invoice No Viettel", true);
-
-            DataGridViewColumn isPaidCol = GetColumn("Is Paid");
-            DataGridViewColumn paymentStatusCol = GetColumn("Payment Status");
-            if (isPaidCol != null && paymentStatusCol != null)
-            {
-                isPaidCol.ReadOnly = true;
-                paymentStatusCol.DisplayIndex = isPaidCol.DisplayIndex + 1;
-            }
-            else if (isPaidCol != null)
-            {
-                isPaidCol.ReadOnly = true;
-            }
             
             // Đảm bảo cột Select luôn hiển thị
             if (dataGridView1.Columns.Contains("Select"))
@@ -333,7 +321,6 @@ namespace InvoiceClient
                 { "Cashamount", "Cash Amount" },
                 { "Transferamount", "Transfer Amount" },
                 { "CreatedAt", "Created At" },
-                { "IsPaid", "Is Paid" },
                 { "PaymentStatus", "Payment Status" },
                 { "InvoiceNoViettel", "Invoice No Viettel" }
             };
@@ -557,12 +544,13 @@ namespace InvoiceClient
         {
             try
             {
+                // Luôn lấy mới token trước khi gọi API danh sách hóa đơn
+                getAccessToken();
                 if (string.IsNullOrEmpty(strAccessToken))
                 {
                     MessageBox.Show("Chưa lấy giá tị Token");
                     return;
                 }
-                string apiLink = urlAPI + @"/services/einvoiceapplication/api/InvoiceAPI/InvoiceUtilsWS/getListInvoiceDataControl";
                 string contentType = "application/json";
 
                 int chk = chkExample.Checked ? 1 : 0;
@@ -570,6 +558,11 @@ namespace InvoiceClient
 
                 if (chk == 1)
                 {
+                    if (string.IsNullOrWhiteSpace(codeTax) && string.IsNullOrWhiteSpace(txttaxcode.Text))
+                    {
+                        MessageBox.Show("Thiếu CodeTax trong App.config và ô Tax Code đang trống.");
+                        return;
+                    }
                     request = getInvoiceExample();
                 }
                 else
@@ -582,14 +575,197 @@ namespace InvoiceClient
                     }
                 }
 
-                string result = CreateRequest.webRequestV2(apiLink, request, strAccessToken, "POST", contentType, proxy, port, ssl);
+                Tuple<string, string>[] endpointCandidates = new Tuple<string, string>[]
+                {
+                    new Tuple<string, string>("/services/einvoiceapplication/api/InvoiceAPI/InvoiceWS/getInvoiceList", "GET"),
+                    new Tuple<string, string>("/api/InvoiceAPI/InvoiceWS/getInvoiceList", "GET"),
+                    new Tuple<string, string>("/services/einvoiceapplication/api/InvoiceAPI/InvoiceUtilsWS/getListInvoiceDataControl", "POST"),
+                    new Tuple<string, string>("/api/InvoiceAPI/InvoiceUtilsWS/getListInvoiceDataControl", "POST")
+                };
 
-                MessageBox.Show("OK  " + result);
+                string result = null;
+                string selectedEndpoint = null;
+                Exception lastException = null;
+
+                foreach (Tuple<string, string> endpointCandidate in endpointCandidates)
+                {
+                    try
+                    {
+                        string endpoint = endpointCandidate.Item1;
+                        string httpMethod = endpointCandidate.Item2;
+                        string apiLink = urlAPI + endpoint;
+                        string requestBody = httpMethod == "GET" ? "" : request;
+                        string currentResult = CreateRequest.webRequestV2(apiLink, requestBody, strAccessToken, httpMethod, contentType, proxy, port, ssl);
+                        if (!IsInvalidInvoiceListResponse(currentResult))
+                        {
+                            result = currentResult;
+                            selectedEndpoint = httpMethod + " " + endpoint;
+                            break;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        lastException = ex;
+                    }
+                }
+
+                if (string.IsNullOrEmpty(result))
+                {
+                    string errorMessage = "Không gọi được API danh sách hóa đơn. Vui lòng kiểm tra endpoint Viettel cấu hình cho tenant này.";
+                    if (lastException != null)
+                    {
+                        errorMessage += "\nChi tiết: " + lastException.Message;
+                    }
+                    MessageBox.Show(errorMessage);
+                    return;
+                }
+
+                this.Text = "NPPBaoNgoc - " + selectedEndpoint;
+                if (IsNoDataApiResponse(result))
+                {
+                    MessageBox.Show("Không tìm thấy dữ liệu hóa đơn theo điều kiện lọc hiện tại.");
+                    return;
+                }
+                ShowInvoiceListDialog(result);
             }
             catch (Exception ex)
             {
                 MessageBox.Show("NOK " + ex.Message);
             }
+        }
+
+        private void ShowInvoiceListDialog(string jsonResult)
+        {
+            DataTable invoiceTable = ConvertInvoiceListJsonToDataTable(jsonResult);
+            if (invoiceTable == null || invoiceTable.Rows.Count == 0)
+            {
+                MessageBox.Show("API trả về không có dữ liệu danh sách hóa đơn.");
+                return;
+            }
+
+            Form dialog = new Form
+            {
+                Text = "Viettel - GetInvoiceList",
+                StartPosition = FormStartPosition.CenterParent,
+                Width = 1200,
+                Height = 650
+            };
+
+            DataGridView grid = new DataGridView
+            {
+                Dock = DockStyle.Fill,
+                ReadOnly = true,
+                AllowUserToAddRows = false,
+                AllowUserToDeleteRows = false,
+                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.DisplayedCells,
+                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+                DataSource = invoiceTable
+            };
+
+            dialog.Controls.Add(grid);
+            dialog.ShowDialog(this);
+        }
+
+        private DataTable ConvertInvoiceListJsonToDataTable(string jsonResult)
+        {
+            if (string.IsNullOrWhiteSpace(jsonResult))
+            {
+                return new DataTable();
+            }
+
+            JToken rootToken;
+            try
+            {
+                rootToken = JsonConvert.DeserializeObject<JToken>(jsonResult);
+            }
+            catch
+            {
+                DataTable rawTable = new DataTable();
+                rawTable.Columns.Add("Response");
+                rawTable.Rows.Add(jsonResult);
+                return rawTable;
+            }
+
+            JArray dataArray = FindFirstObjectArray(rootToken);
+            if (dataArray == null || dataArray.Count == 0)
+            {
+                DataTable rawTable = new DataTable();
+                rawTable.Columns.Add("Response");
+                rawTable.Rows.Add(jsonResult);
+                return rawTable;
+            }
+
+            return JsonConvert.DeserializeObject<DataTable>(dataArray.ToString(Formatting.None));
+        }
+
+        private bool IsInvalidInvoiceListResponse(string responseText)
+        {
+            if (string.IsNullOrWhiteSpace(responseText))
+            {
+                return true;
+            }
+
+            string normalized = responseText.TrimStart();
+            bool isHtmlResponse = normalized.StartsWith("<!doctype", StringComparison.OrdinalIgnoreCase)
+                || normalized.StartsWith("<html", StringComparison.OrdinalIgnoreCase);
+
+            return isHtmlResponse
+                || responseText.Contains("\"status\":404")
+                || responseText.Contains("\"status\":405")
+                || responseText.Contains("\"error\":\"Not Found\"")
+                || responseText.Contains("\"message\":\"Not Found\"")
+                || responseText.Contains("\"title\":\"Method Not Allowed\"")
+                || responseText.Contains("\"message\":\"error.http.405\"");
+        }
+
+        private bool IsNoDataApiResponse(string responseText)
+        {
+            if (string.IsNullOrWhiteSpace(responseText))
+            {
+                return false;
+            }
+
+            return responseText.Contains("\"message\":\"NOT_FOUND_DATA\"")
+                || responseText.Contains("Không tìm thấy bản ghi");
+        }
+
+        private JArray FindFirstObjectArray(JToken token)
+        {
+            if (token == null)
+            {
+                return null;
+            }
+
+            if (token.Type == JTokenType.Array)
+            {
+                JArray currentArray = (JArray)token;
+                if (currentArray.Count > 0 && currentArray[0].Type == JTokenType.Object)
+                {
+                    return currentArray;
+                }
+
+                foreach (JToken item in currentArray)
+                {
+                    JArray foundInArray = FindFirstObjectArray(item);
+                    if (foundInArray != null)
+                    {
+                        return foundInArray;
+                    }
+                }
+            }
+            else if (token.Type == JTokenType.Object)
+            {
+                foreach (JProperty property in token.Children<JProperty>())
+                {
+                    JArray foundInObject = FindFirstObjectArray(property.Value);
+                    if (foundInObject != null)
+                    {
+                        return foundInObject;
+                    }
+                }
+            }
+
+            return null;
         }
 
         private void btnUpdatePaymentStatus_Click(object sender, EventArgs e)
@@ -1051,7 +1227,12 @@ namespace InvoiceClient
 
                         // Lấy tax riêng của từng order (cho phép % thuế khác nhau)
                         double itemTax = Convert.ToDouble(ds.Tables[0].Rows[i]["TaxPercent"]);
-                        double unitPrice = Convert.ToDouble(UnitPrices[j]);
+                        // TaxPercent trong DB có thể 0% dù UnitPrice đã gồm VAT (thường 10%)
+                        if (itemTax == 0)
+                            itemTax = tax > 0 ? tax : 10;
+                        // UnitPrice trong DB là đơn giá đã gồm VAT; API Viettel cần đơn giá trước thuế
+                        double unitPriceWithTax = Convert.ToDouble(UnitPrices[j]);
+                        double unitPriceBeforeTax = unitPriceWithTax / (1 + itemTax / 100);
                         int quantity = Convert.ToInt32(quantities[j]);
                         
                         // Tính quantity thực (ActualQuantity = Quantity - PromotionQuantity)
@@ -1060,8 +1241,8 @@ namespace InvoiceClient
      
             
                         // Tính tiền trước thuế - SỬ DỤNG ACTUALQUANTITY (Quantity thực = Quantity - PromotionQuantity)
-                        //double amountWithoutTax = unitPrice * quantity ; 
-                        double amountWithoutTax = Math.Round(unitPrice, 0, MidpointRounding.AwayFromZero) * actualQuantity;
+                        double roundedUnitPriceBeforeTax = Math.Round(unitPriceBeforeTax, 0, MidpointRounding.AwayFromZero);
+                        double amountWithoutTax = roundedUnitPriceBeforeTax * actualQuantity;
                         // Tính tiền thuế - sử dụng tax riêng của từng order
                         double taxAmount =( amountWithoutTax  - (amountWithoutTax * (double.Parse(item.discount) / 100))) * (itemTax / 100);
 
@@ -1074,11 +1255,9 @@ namespace InvoiceClient
 
                         item.taxAmount = Math.Round(taxAmount, 0, MidpointRounding.AwayFromZero).ToString();
 
-                        //item.taxPercentage = ds.Tables[0].Rows[i]["TaxPercent"].ToString(); 
-                        item.taxPercentage = Convert.ToInt32(ds.Tables[0].Rows[i]["TaxPercent"]).ToString();
+                        item.taxPercentage = Convert.ToInt32(itemTax).ToString();
 
-                        // Sử dụng unitPrice và actualQuantity (Quantity thực = Quantity - PromotionQuantity)
-                        item.unitPrice = Math.Round(unitPrice, 0, MidpointRounding.AwayFromZero).ToString();
+                        item.unitPrice = roundedUnitPriceBeforeTax.ToString();
 
                         item.quantity = actualQuantity.ToString(); // Sử dụng ActualQuantity (Quantity thực) thay vì Quantity gốc
                         item.itemDiscount = "0"; 
@@ -1107,7 +1286,7 @@ namespace InvoiceClient
             objSummary.totalAmountWithTax = (totalamountwithtax - totaldiscount).ToString();
             // Tax percentage trong summary - lấy từ order đầu tiên (chỉ để hiển thị, không ảnh hưởng tính toán)
             //objSummary.taxPercentage = ds.Tables[0].Rows[0]["TaxPercent"].ToString();
-            objSummary.taxPercentage = Convert.ToInt32(ds.Tables[0].Rows[0]["TaxPercent"]).ToString();
+            objSummary.taxPercentage = tax.ToString();//Convert.ToInt32(ds.Tables[0].Rows[0]["TaxPercent"]).ToString();
             objSummary.totalAmountWithTaxInWords = NumberUtil.DocSoThanhChu(objSummary.totalAmountWithTax.Replace("-", ""));
             objSummary.totalTaxAmount = totaltax.ToString();
             
@@ -1352,10 +1531,18 @@ namespace InvoiceClient
         }
         private string getInvoiceExample()
         {
+            string supplierTaxCode = (codeTax ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(supplierTaxCode))
+            {
+                supplierTaxCode = (txttaxcode.Text ?? string.Empty).Trim();
+            }
+            string fromDate = dateTimePicker1.Value.ToString("dd/MM/yyyy");
+            string toDate = dateTimePicker2.Value.ToString("dd/MM/yyyy");
+
             string str = @"{
-	            ""supplierTaxCode"":""0100109106-712"",
-	            ""fromDate"":""01/08/2020"",
-	            ""toDate"":""18/09/2020""
+	            ""supplierTaxCode"":""" + supplierTaxCode + @""",
+	            ""fromDate"":""" + fromDate + @""",
+	            ""toDate"":""" + toDate + @"""
             }";
 
             return str;
@@ -1890,60 +2077,55 @@ namespace InvoiceClient
                     return;
                 }
 
-                // Tạo string ids chứa tất cả các ID đã chọn và kiểm tra điều kiện customerphone, customername
-                List<string> listIds = new List<string>();
-                string firstCustomerPhone = null;
-                string firstCustomerName = null;
-                bool isFirstRow = true;
-                string customername_invoiceno = null;
                 foreach (DataGridViewRow row in selectedRows)
                 {
-
-                    if (row.Cells["id"].Value != null)
-                    {
-                        string id = row.Cells["id"].Value.ToString().Trim();
-                        if (!string.IsNullOrEmpty(id))
-                        {
-                            listIds.Add(id);
-                        }
-                    }
-
-                    // Kiểm tra customerphone và customername
-                    string customerPhone = row.Cells["CustomerPhone"]?.Value?.ToString()?.Trim() ?? "";
-                    string customerName = row.Cells["CustomerName"]?.Value?.ToString()?.Trim() ?? "";
-                    customername_invoiceno = customerName.Trim();
                     string invoice_no_viettel = row.Cells["InvoiceNoViettel"]?.Value?.ToString()?.Trim() ?? "";
-                    if (isFirstRow)
-                    {
-                        firstCustomerPhone = customerPhone;
-                        firstCustomerName = customerName;
-                        isFirstRow = false;
-                    }
-                    else
-                    {
-                        // Kiểm tra xem có khác với dòng đầu tiên không
-                        if (customerPhone != firstCustomerPhone || customerName != firstCustomerName)
-                        {
-                            MessageBox.Show("Các dòng đã chọn phải có chung 1 đối tượng khách hàng !");
-                            return;
-                        }
-                    }
-
-                    if(invoice_no_viettel != "" || !string.IsNullOrEmpty(invoice_no_viettel))
+                    if (!string.IsNullOrEmpty(invoice_no_viettel))
                     {
                         MessageBox.Show("Xuất hiện dữ liệu đã có Số Hóa Đơn Viettel");
                         return;
                     }
                 }
 
-                string ids = string.Join(",", listIds); // Tạo string ids từ danh sách
+                List<DataGridViewRow> rowsWithId = selectedRows
+                    .Where(r => r.Cells["id"].Value != null && !string.IsNullOrWhiteSpace(r.Cells["id"].Value.ToString()))
+                    .ToList();
 
-                // Tự động convert các orders chưa convert và lưu vào database
-                if (listIds.Count > 0)
+                if (rowsWithId.Count == 0)
+                {
+                    MessageBox.Show("Không có dòng nào có mã đơn (id) hợp lệ!");
+                    return;
+                }
+
+                List<string> allIds = rowsWithId
+                    .Select(r => r.Cells["id"].Value.ToString().Trim())
+                    .Distinct()
+                    .ToList();
+
+                var customerGroups = rowsWithId
+                    .GroupBy(r => string.Concat(
+                        r.Cells["CustomerPhone"]?.Value?.ToString()?.Trim() ?? "",
+                        "\u001F",
+                        r.Cells["CustomerName"]?.Value?.ToString()?.Trim() ?? ""))
+                    .ToList();
+
+                int chk = chkExample.Checked ? 1 : 0;
+                if (customerGroups.Count > 1 && chk != 1)
+                {
+                    MessageBox.Show(
+                        "Khi chọn đồng thời nhiều khách hàng, vui lòng bật chế độ dùng Example (JSON mẫu) để tạo nháp từng nhóm đơn.",
+                        "Thông báo",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information);
+                    return;
+                }
+
+                // Tự động convert các orders chưa convert và lưu vào database (tất cả id đã chọn)
+                if (allIds.Count > 0)
                 {
                     List<string> ordersToConvert = new List<string>();
                     cnn.Open();
-                    string idsForSqlCheck = string.Join("','", listIds);
+                    string idsForSqlCheck = string.Join("','", allIds);
                     string sqlCheck = $"SELECT id FROM Orders_Viettel WHERE id IN ('{idsForSqlCheck}') AND (IsConvertToLiter IS NULL OR IsConvertToLiter = 0)";
                     SqlCommand comCheck = new SqlCommand(sqlCheck, cnn);
                     SqlDataReader reader = comCheck.ExecuteReader();
@@ -1976,87 +2158,77 @@ namespace InvoiceClient
                     }
                 }
 
-                // Hiển thị form nhập số hóa đơn nội bộ
-                frmInputInvoiceNo frmInput = new frmInputInvoiceNo(customername_invoiceno);
-                if (frmInput.ShowDialog() != DialogResult.OK)
-                {
-                    return; // Người dùng hủy, không tiếp tục xử lý
-                }
-
-                sohoadon_noibo = frmInput.InvoiceNo; // Lấy số hóa đơn nội bộ từ form
-
-                // Lấy dòng đầu tiên được tick để xử lý
-                int index = selectedRows[0].Index;
-                String hoadonid = dataGridView1.Rows[index].Cells["id"].Value.ToString().Trim();
-
                 if (string.IsNullOrEmpty(strAccessToken))
                 {
                     MessageBox.Show("Chưa lấy giá tị Token");
                     return;
                 }
-        
+
                 string apiLink = urlAPI + @"/services/einvoiceapplication/api/InvoiceAPI/InvoiceUtilsWS/createInvoiceDraftPreview/" + codeTax;
                 string contentType = "application/json";
 
-                int chk = chkExample.Checked ? 1 : 0;
-                string request = "";
+                foreach (var grp in customerGroups)
+                {
+                    List<string> listIds = grp.Select(r => r.Cells["id"].Value.ToString().Trim()).Distinct().ToList();
+                    string customername_invoiceno = grp.First().Cells["CustomerName"]?.Value?.ToString()?.Trim() ?? "";
 
-                if (chk == 1)
-                {
-                    request = createInvoiceExample(listIds);
-                    txtjson.Text = request;
-                }
-                else
-                {
-                    request = txtBody.Text;
-                    if (string.IsNullOrEmpty(request))
+                    frmInputInvoiceNo frmInput = new frmInputInvoiceNo(customername_invoiceno);
+                    if (frmInput.ShowDialog() != DialogResult.OK)
                     {
-                        MessageBox.Show("Chưa nhập giá trị text của body");
                         return;
                     }
-                }
 
-                if (string.IsNullOrEmpty(request))
-                {
-                    return;
-                }
+                    sohoadon_noibo = frmInput.InvoiceNo;
+
+                    string request = "";
+
+                    if (chk == 1)
+                    {
+                        request = createInvoiceExample(listIds);
+                        txtjson.Text = request;
+                    }
+                    else
+                    {
+                        request = txtBody.Text;
+                        if (string.IsNullOrEmpty(request))
+                        {
+                            MessageBox.Show("Chưa nhập giá trị text của body");
+                            return;
+                        }
+                    }
+
+                    if (string.IsNullOrEmpty(request))
+                    {
+                        return;
+                    }
+
                     string result = CreateRequest.webRequestV2(apiLink, request, strAccessToken, "POST", contentType, proxy, port, ssl);
-                MessageBox.Show( result);
-                //txterror.Text = result;
-                int startIndex = result.IndexOf(@"fileName"":""") + ((@"""fileName"":""").Length);
-                int length = result.IndexOf(@""",""fileToBytes") - startIndex;
-                //string fileName = sohoadon_noibo + "_" +
-                //                DateTime.Now.Month + DateTime.Now.Day + DateTime.Now.Year +
-                //                DateTime.Now.Hour + DateTime.Now.Minute + DateTime.Now.Second;
-                string fileName = sohoadon_noibo;
-                string[] tach;
-                tach = result.Split(',');
-                string[] tachok;
-                tachok = tach[2].Split(':');
-                string tachcuoi = tachok[1].Replace("\"", "");
-                string pdfPath = "c:\\temp\\" + fileName + ".pdf";
-                using (System.IO.FileStream stream = System.IO.File.Create(pdfPath))
-                {
-                    System.Byte[] byteArray = System.Convert.FromBase64String(tachcuoi);
-                    stream.Write(byteArray, 0, byteArray.Length);
-                }
-                // insert vao taxinvoice theo so hoa don vtel dieu kien theo hoadonid
-                string dtNow = DateTime.Today.ToString("dd-MMM-yyyy");
-                cnn.Open();
-                // Tạo danh sách ID với dấu nháy đơn cho SQL IN clause
-                string idsForSql = string.Join("','", listIds);
-                string sqlupdate = "update Orders_viettel set IsDraft=1 , hoadonnoibo ='"+ sohoadon_noibo + "' where id in ('" + idsForSql + "')";  // update tất cả các ID đã chọn
-                SqlCommand comupdate = new SqlCommand(sqlupdate, cnn); //bat dau truy van
-                comupdate.ExecuteNonQuery();
-                
-                //update table orders
-                string sqlupdate_orders = "update Orders set IsDraft=1 , hoadonnoibo ='" + sohoadon_noibo + "' where id in ('" + idsForSql + "')";  // update tất cả các ID đã chọn
-                SqlCommand comupdate_orders = new SqlCommand(sqlupdate_orders, cnn); //bat dau truy van
-                comupdate_orders.ExecuteNonQuery();
+                    MessageBox.Show(result);
+                    string fileName = sohoadon_noibo;
+                    string[] tach;
+                    tach = result.Split(',');
+                    string[] tachok;
+                    tachok = tach[2].Split(':');
+                    string tachcuoi = tachok[1].Replace("\"", "");
+                    string pdfPath = "c:\\temp\\" + fileName + ".pdf";
+                    using (System.IO.FileStream stream = System.IO.File.Create(pdfPath))
+                    {
+                        System.Byte[] byteArray = System.Convert.FromBase64String(tachcuoi);
+                        stream.Write(byteArray, 0, byteArray.Length);
+                    }
+                    cnn.Open();
+                    string idsForSql = string.Join("','", listIds);
+                    string sqlupdate = "update Orders_viettel set IsDraft=1 , hoadonnoibo ='" + sohoadon_noibo + "' where id in ('" + idsForSql + "')";
+                    SqlCommand comupdate = new SqlCommand(sqlupdate, cnn);
+                    comupdate.ExecuteNonQuery();
 
-                cnn.Close();  // đóng kết nối
-                // lay files da xuat ve
-                MessageBox.Show("OK " + result);
+                    string sqlupdate_orders = "update Orders set IsDraft=1 , hoadonnoibo ='" + sohoadon_noibo + "' where id in ('" + idsForSql + "')";
+                    SqlCommand comupdate_orders = new SqlCommand(sqlupdate_orders, cnn);
+                    comupdate_orders.ExecuteNonQuery();
+
+                    cnn.Close();
+                    MessageBox.Show("OK " + result);
+                }
 
                 // Gửi email với PDF đính kèm cho customer
                 //try
@@ -2094,7 +2266,6 @@ namespace InvoiceClient
                 MessageBox.Show(ex.ToString ());
             }
         }
-
         private void cbocustomername_TextChanged(object sender, EventArgs e)
         {
             try

@@ -1,4 +1,4 @@
-﻿namespace InvoiceClient
+namespace InvoiceClient
 {
     partial class frmInvoice
     {
@@ -97,13 +97,12 @@
             // 
             // btnGetInvoice
             // 
-            this.btnGetInvoice.Location = new System.Drawing.Point(273, 320);
+            this.btnGetInvoice.Location = new System.Drawing.Point(193, 114);
             this.btnGetInvoice.Name = "btnGetInvoice";
             this.btnGetInvoice.Size = new System.Drawing.Size(149, 40);
             this.btnGetInvoice.TabIndex = 1;
-            this.btnGetInvoice.Text = "Danh sách hóa đơn theo khoảng thời gian";
+            this.btnGetInvoice.Text = "GetInvoiceList";
             this.btnGetInvoice.UseVisualStyleBackColor = true;
-            this.btnGetInvoice.Visible = false;
             this.btnGetInvoice.Click += new System.EventHandler(this.btnGetInvoice_Click);
             // 
             // btnSavePDF
@@ -469,6 +468,7 @@
             this.txtvat.Name = "txtvat";
             this.txtvat.Size = new System.Drawing.Size(77, 20);
             this.txtvat.TabIndex = 46;
+            this.txtvat.Text = "10.00";
             this.txtvat.KeyPress += new System.Windows.Forms.KeyPressEventHandler(this.txtvat_KeyPress);
             this.txtvat.Leave += new System.EventHandler(this.txtvat_Leave);
             // 
