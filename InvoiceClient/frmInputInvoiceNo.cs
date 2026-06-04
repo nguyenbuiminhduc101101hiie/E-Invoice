@@ -106,7 +106,18 @@ namespace InvoiceClient
             }
 
             // Tạo số hóa đơn theo format yyMMdd_STT_CustomerName (STT tăng trong tháng, reset về 1 khi sang tháng mới)
-            return today + "_" + nextSTT.ToString() + "_" + CustomerName;
+            string safeCustomerName = CustomerName ?? "";
+            foreach (char c in System.IO.Path.GetInvalidFileNameChars())
+            {
+                safeCustomerName = safeCustomerName.Replace(c, '_');
+            }
+            safeCustomerName = safeCustomerName.Replace('(', '_').Replace(')', '_').Replace('%', '_').Trim();
+            if (string.IsNullOrEmpty(safeCustomerName))
+            {
+                safeCustomerName = "Customer";
+            }
+
+            return today + "_" + nextSTT.ToString() + "_" + safeCustomerName;
         }
     }
 }

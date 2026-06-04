@@ -43,6 +43,13 @@ namespace InvoiceClient
         // Flag để tránh vòng lặp khi set DataSource
         private bool isUpdatingCustomerName = false;
         private bool isUpdatingEmployeeName = false;
+
+        private class SplitInvoiceRequest
+        {
+            public double TaxPercent { get; set; }
+            public string RequestJson { get; set; }
+        }
+
         private void Search()
         {
 
@@ -878,7 +885,168 @@ namespace InvoiceClient
 
         }
 
-        private string createInvoiceExample(List<string> idsForSql)
+        private string SanitizeFileName(string fileName)
+        {
+            if (string.IsNullOrWhiteSpace(fileName))
+            {
+                return "invoice";
+            }
+
+            foreach (char c in Path.GetInvalidFileNameChars())
+            {
+                fileName = fileName.Replace(c, '_');
+            }
+
+            return fileName.Trim();
+        }
+
+        private string SaveDraftPdf(string invoiceNo, string base64Content)
+        {
+            Directory.CreateDirectory(@"c:\temp");
+            string safeName = SanitizeFileName(invoiceNo);
+            string pdfPath = Path.Combine(@"c:\temp", safeName + ".pdf");
+            byte[] byteArray = Convert.FromBase64String(base64Content);
+
+            if (File.Exists(pdfPath))
+            {
+                try
+                {
+                    File.Delete(pdfPath);
+                }
+                catch (IOException)
+                {
+                    pdfPath = Path.Combine(@"c:\temp", safeName + "_" + DateTime.Now.ToString("HHmmss") + ".pdf");
+                }
+            }
+
+            File.WriteAllBytes(pdfPath, byteArray);
+            return pdfPath;
+        }
+
+        private string ExtractDraftPdfBase64(string apiResult)
+        {
+            string[] parts = apiResult.Split(',');
+            if (parts.Length < 3)
+            {
+                throw new InvalidOperationException("Kết quả API không hợp lệ, không tìm thấy dữ liệu PDF.");
+            }
+
+            string[] pdfPart = parts[2].Split(':');
+            if (pdfPart.Length < 2)
+            {
+                throw new InvalidOperationException("Kết quả API không hợp lệ, không parse được PDF base64.");
+            }
+
+            return pdfPart[1].Replace("\"", "").Trim();
+        }
+
+        private string BuildInvoiceJson(InvoiceInfo objInvoice, BuyerInfo objBuyer, List<ItemInfo> lstItem, double taxPercentForSummary)
+        {
+            double sumTotalAmountWithoutTax = 0, totalamountwithtax = 0, totaltax = 0, totaldiscount = 0;
+
+            foreach (var itemInfo in lstItem)
+            {
+                double amountWithoutTax = double.Parse(itemInfo.itemTotalAmountWithoutTax);
+                double taxAmount = double.Parse(itemInfo.taxAmount);
+                double discount = amountWithoutTax * (double.Parse(itemInfo.discount) / 100);
+                sumTotalAmountWithoutTax += amountWithoutTax;
+                totalamountwithtax += amountWithoutTax + taxAmount;
+                totaltax += taxAmount;
+                totaldiscount += discount;
+            }
+
+            SummarizeInfo objSummary = new SummarizeInfo();
+            objSummary.discountAmount = totaldiscount.ToString();
+            objSummary.sumOfTotalLineAmountWithoutTax = sumTotalAmountWithoutTax.ToString();
+            objSummary.totalAmountWithoutTax = (sumTotalAmountWithoutTax - totaldiscount).ToString();
+            objSummary.totalAmountWithTax = (totalamountwithtax - totaldiscount).ToString();
+            objSummary.taxPercentage = Convert.ToInt32(taxPercentForSummary).ToString();
+            objSummary.totalAmountWithTaxInWords = NumberUtil.DocSoThanhChu(objSummary.totalAmountWithTax.Replace("-", ""));
+            objSummary.totalTaxAmount = totaltax.ToString();
+
+            double taxableAmount = sumTotalAmountWithoutTax - totaldiscount;
+
+            string str = @"{    ""generalInvoiceInfo"": " +
+                   @"{       ""invoiceType"":""" + objInvoice.invoiceType +
+                   @""",       ""templateCode"":""" + objInvoice.templateCode +
+                   @""", 	""invoiceSeries"":""" + objInvoice.invoiceSeries +
+                   @""",       ""transactionUuid"": """ + objInvoice.uuId +
+                   @""",       ""invoiceIssuedDate"":" + objInvoice.invoiceIssuedDate +
+                   @",       ""currencyCode"":""" + objInvoice.currencyCode + @""", 
+                    ""adjustmentType"":""" + objInvoice.adjustmentType + @""",  
+                    ""paymentStatus"":" + objInvoice.paymentStatus + @",
+                    ""paymentTypeName"": """ + objInvoice.paymentType + @""",
+                    ""cusGetInvoiceRight"":" + objInvoice.cusGetInvoiceRight + @",      
+                    ""buyerIdNo"":""" + objInvoice.buyerIdNo + @""",        
+                    ""buyerIdType"":""" + objInvoice.buyerIdType + @"""    },    
+                    ""buyerInfo"":{              
+                    ""buyerLegalName"":""" + objBuyer.buyerLegalName + @""",  
+                    ""buyerName"":""" + objBuyer.buyerName + @""",
+                    ""buyerTaxCode"":""" + objBuyer.buyerTaxCode + @""",      
+                    ""buyerAddressLine"":""" + objBuyer.buyerAddressLine + @""",       
+                    ""buyerPhoneNumber"":""" + objBuyer.buyerPhoneNumber + @""",      
+                    ""buyerEmail"":""" + objBuyer.buyerEmail + @""",      
+                    ""buyerIdNo"":""" + objBuyer.buyerIdNo + @""",   
+                    ""buyerIdType"":""" + objBuyer.buyerIdType + @"""    },
+                    ""payments"":[  {""paymentMethodName"":""" + objInvoice.paymentType + @"""    }    ],    
+                    ""deliveryInfo"":{     },
+                    ""itemInfo"":[       ";
+            int indexItem = 1;
+
+            foreach (var itemInfo in lstItem)
+            {
+                str += @"{""lineNumber"":" + indexItem + @",          
+                    ""itemCode"":""" + itemInfo.itemCode + @""",    
+                    ""itemName"":""" + itemInfo.itemName.Replace("\r", "  ").Trim() + @""",
+                    ""unitName"":""" + itemInfo.unitName + @""",     
+                    ""unitPrice"":" + itemInfo.unitPrice + @",             
+                    ""quantity"":" + itemInfo.quantity + @",               
+                    ""itemTotalAmountWithoutTax"":" + itemInfo.itemTotalAmountWithoutTax + @",               
+                    ""taxPercentage"":" + itemInfo.taxPercentage + @",              
+                    ""taxAmount"":" + itemInfo.taxAmount + @",              
+                    ""discount"":" + itemInfo.discount + @",  
+                    ""itemDiscount"":" + itemInfo.itemDiscount;
+
+                if (!string.IsNullOrEmpty(itemInfo.specialInfo?.value))
+                {
+                    str += @",
+                        ""selection"":" + 6 + @",
+                        ""itemType"":" + 2 + @",
+                        ""specialInfo"": [
+                            {
+                                ""name"": """ + itemInfo.specialInfo.name + @""",
+                                ""value"": """ + itemInfo.specialInfo.value + @"""
+                            }
+                        ]";
+                }
+
+                str += "}";
+
+                if (indexItem != lstItem.Count)
+                    str += " , ";
+
+                indexItem++;
+            }
+
+            str += @"],    
+                    ""discountItemInfo"":[     ],   
+                    ""summarizeInfo"":{       
+                    ""sumOfTotalLineAmountWithoutTax"":" + objSummary.sumOfTotalLineAmountWithoutTax + @",          
+                    ""totalAmountWithoutTax"":" + objSummary.totalAmountWithoutTax + @",   
+                    ""totalTaxAmount"":" + objSummary.totalTaxAmount + @",  
+                    ""totalAmountWithTax"":" + objSummary.totalAmountWithTax + @",  
+                    ""totalAmountWithTaxInWords"":""" + objSummary.totalAmountWithTaxInWords + @""",       
+                    ""discountAmount"":" + objSummary.discountAmount + @",  
+                    ""taxPercentage"":" + objSummary.taxPercentage + @"  },    
+                    ""taxBreakdowns"":[       {         
+                   ""taxPercentage"":" + taxPercentForSummary.ToString(System.Globalization.CultureInfo.InvariantCulture) + @",                    
+                    ""taxableAmount"": " + Math.Round(taxableAmount, 0, MidpointRounding.AwayFromZero).ToString() + @",
+                    ""taxAmount"": " + Math.Round(totaltax, 0, MidpointRounding.AwayFromZero).ToString() + @"       }    ] } ";
+
+            return str;
+        }
+
+        private List<SplitInvoiceRequest> createInvoiceExamples(List<string> idsForSql)
         {
      
             string invoicetype = "1";
@@ -917,18 +1085,18 @@ namespace InvoiceClient
             var ds = new DataSet();
             ds.Tables.Add(dt1);
             cnn.Close();
-            double tax = 0;
+            //double tax = 0;
             
             if (txtmauso.Text.Length == 0)
             {
                 MessageBox.Show("Nhập Mẫu Số !", "Cảnh báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return "";
+                return new List<SplitInvoiceRequest>();
             }
 
             if (txtinvseries.Text.Length == 0)
             {
                 MessageBox.Show("Nhập INV Series !", "Cảnh báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return "";
+                return new List<SplitInvoiceRequest>();
             }
 
             //if (cboPTTT.Text.Length == 0)
@@ -948,48 +1116,48 @@ namespace InvoiceClient
                 {
                     // Lấy thông tin từ order đầu tiên
                     Cusid = ds.Tables[0].Rows[0]["CustomerPhone"].ToString();
-                    tax = Convert.ToDouble(ds.Tables[0].Rows[0]["TaxPercent"]);
+                    //tax = Convert.ToDouble(ds.Tables[0].Rows[0]["TaxPercent"]);
                     
-                    // API Viettel cho phép các items có % thuế khác nhau trong cùng 1 hóa đơn
-                    // Không cần kiểm tra bắt buộc cùng tax percent
+                    //// API Viettel cho phép các items có % thuế khác nhau trong cùng 1 hóa đơn
+                    //// Không cần kiểm tra bắt buộc cùng tax percent
                     
-                    if (tax == 0)
-                    {
-                        var result = MessageBox.Show(
-                            "VAT của đơn hiện là 0% , bạn có muốn sửa lại không ?",
-                            "Xác nhận VAT",
-                            MessageBoxButtons.YesNoCancel,
-                            MessageBoxIcon.Question,
-                            MessageBoxDefaultButton.Button2
-                        );
+                    //if (tax == 0)
+                    //{
+                    //    var result = MessageBox.Show(
+                    //        "VAT của đơn hiện là 0% , bạn có muốn sửa lại không ?",
+                    //        "Xác nhận VAT",
+                    //        MessageBoxButtons.YesNoCancel,
+                    //        MessageBoxIcon.Question,
+                    //        MessageBoxDefaultButton.Button2
+                    //    );
 
-                        if (result == DialogResult.No)
-                        {
-                            tax = 0;
-                        }
-                        else if (result == DialogResult.Yes)
-                        {
-                            if (double.TryParse(txtvat.Text.Replace(',', '.'), out double newVat))
-                            {
-                                tax = newVat;
-                            }
-                            else
-                            {
-                                MessageBox.Show("Giá trị VAT nhập không hợp lệ. Hệ thống sẽ dùng 0%.",
-                                                "Cảnh báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                                return "";
-                            }
-                        }
-                        else if (result == DialogResult.Cancel)
-                        {
-                            return "";
-                        }
-                    }
+                    //    if (result == DialogResult.No)
+                    //    {
+                    //        tax = 0;
+                    //    }
+                    //    else if (result == DialogResult.Yes)
+                    //    {
+                    //        if (double.TryParse(txtvat.Text.Replace(',', '.'), out double newVat))
+                    //        {
+                    //            tax = newVat;
+                    //        }
+                    //        else
+                    //        {
+                    //            MessageBox.Show("Giá trị VAT nhập không hợp lệ. Hệ thống sẽ dùng 0%.",
+                    //                            "Cảnh báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    //            return "";
+                    //        }
+                    //    }
+                    //    else if (result == DialogResult.Cancel)
+                    //    {
+                    //        return "";
+                    //    }
+                    //}
                 }
                 else
                 {
                     MessageBox.Show("Kiem tra Hoa don.!");
-                    return "";
+                    return new List<SplitInvoiceRequest>();
                 }
             }
 
@@ -1052,7 +1220,7 @@ namespace InvoiceClient
                         else
                         {
                             MessageBox.Show("Nhập CCCD cho customer Để xuất HĐ Cá Nhân!", "Vui thử lại", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                            return "";
+                            return new List<SplitInvoiceRequest>();
                         }
                     }
 
@@ -1143,10 +1311,7 @@ namespace InvoiceClient
                 }
             }
 
-            string note = "";
-            //Item info
-            double sumTotalTaxAmount = 0, sumTotalAmountWithoutTax = 0, totalamountwithtax = 0, totaltax = 0,totaldiscount =0;
-            List<ItemInfo> lstItem = new List<ItemInfo>();
+            List<ItemInfo> allItems = new List<ItemInfo>();
             int stt = 1; // Đếm lineNumber liên tục qua tất cả Orders_viettel
             if (ds != null && ds.Tables.Count > 0 && ds.Tables[0].Rows.Count > 0)
             {
@@ -1220,196 +1385,77 @@ namespace InvoiceClient
                                 else
                                 {
                                     item.unitName = "Lít";
-                                }    
-                            
+                                }
+
+                                // Lấy TaxPercent theo từng service (UnitPrice trong DB đã gồm thuế)
+                                double itemTax = 0;
+                                if (dsservices.Tables[0].Rows[0]["TaxPercent"] != null && dsservices.Tables[0].Rows[0]["TaxPercent"] != DBNull.Value)
+                                {
+                                    double.TryParse(dsservices.Tables[0].Rows[0]["TaxPercent"].ToString(), out itemTax);
+                                }
+
+                                double unitPriceFromDb = Convert.ToDouble(UnitPrices[j]);
+                                double unitPriceBeforeTax = itemTax > 0
+                                    ? unitPriceFromDb / (1 + itemTax / 100)
+                                    : unitPriceFromDb;
+                                int quantity = Convert.ToInt32(quantities[j]);
+
+                                int promotionQuantity = j < promotionQuantities.Count ? promotionQuantities[j] : 0;
+                                int actualQuantity = quantity - promotionQuantity;
+
+                                double roundedUnitPriceBeforeTax = Math.Round(unitPriceBeforeTax, 0, MidpointRounding.AwayFromZero);
+                                double amountWithoutTax = roundedUnitPriceBeforeTax * actualQuantity;
+                                double taxAmount = (amountWithoutTax - (amountWithoutTax * (double.Parse(item.discount) / 100))) * (itemTax / 100);
+
+                                item.itemTotalAmountWithoutTax = Math.Round(amountWithoutTax, 0, MidpointRounding.AwayFromZero).ToString();
+                                item.taxAmount = Math.Round(taxAmount, 0, MidpointRounding.AwayFromZero).ToString();
+                                item.taxPercentage = Convert.ToInt32(itemTax).ToString();
+                                item.unitPrice = roundedUnitPriceBeforeTax.ToString();
+                                item.quantity = actualQuantity.ToString();
+                                item.itemDiscount = "0";
+
+                                if (actualQuantity == 0)
+                                {
+                                    item.unitPrice = "0";
+                                    item.itemName += " (Hàng KM)";
+                                }
+
+                                allItems.Add(item);
+                                stt++;
                             }
                         }
-
-                        // Lấy tax riêng của từng order (cho phép % thuế khác nhau)
-                        double itemTax = Convert.ToDouble(ds.Tables[0].Rows[i]["TaxPercent"]);
-                        // TaxPercent trong DB có thể 0% dù UnitPrice đã gồm VAT (thường 10%)
-                        if (itemTax == 0)
-                            itemTax = tax > 0 ? tax : 10;
-                        // UnitPrice trong DB là đơn giá đã gồm VAT; API Viettel cần đơn giá trước thuế
-                        double unitPriceWithTax = Convert.ToDouble(UnitPrices[j]);
-                        double unitPriceBeforeTax = unitPriceWithTax / (1 + itemTax / 100);
-                        int quantity = Convert.ToInt32(quantities[j]);
-                        
-                        // Tính quantity thực (ActualQuantity = Quantity - PromotionQuantity)
-                        int promotionQuantity = j < promotionQuantities.Count ? promotionQuantities[j] : 0;
-                        int actualQuantity = quantity - promotionQuantity; // Quantity thực để tính tiền
-     
-            
-                        // Tính tiền trước thuế - SỬ DỤNG ACTUALQUANTITY (Quantity thực = Quantity - PromotionQuantity)
-                        double roundedUnitPriceBeforeTax = Math.Round(unitPriceBeforeTax, 0, MidpointRounding.AwayFromZero);
-                        double amountWithoutTax = roundedUnitPriceBeforeTax * actualQuantity;
-                        // Tính tiền thuế - sử dụng tax riêng của từng order
-                        double taxAmount =( amountWithoutTax  - (amountWithoutTax * (double.Parse(item.discount) / 100))) * (itemTax / 100);
-
-                        double discount = amountWithoutTax * (double.Parse(item.discount) / 100); 
-
-                        // Tính tổng tiền sau thuế
-                        double amountWithTax = amountWithoutTax + taxAmount;
-
-                        item.itemTotalAmountWithoutTax = Math.Round(amountWithoutTax, 0, MidpointRounding.AwayFromZero).ToString();
-
-                        item.taxAmount = Math.Round(taxAmount, 0, MidpointRounding.AwayFromZero).ToString();
-
-                        item.taxPercentage = Convert.ToInt32(itemTax).ToString();
-
-                        item.unitPrice = roundedUnitPriceBeforeTax.ToString();
-
-                        item.quantity = actualQuantity.ToString(); // Sử dụng ActualQuantity (Quantity thực) thay vì Quantity gốc
-                        item.itemDiscount = "0"; 
-
-                        sumTotalAmountWithoutTax += double.Parse(item.itemTotalAmountWithoutTax) ;
-                        totalamountwithtax += amountWithTax ;
-                        totaltax += double.Parse(item.taxAmount);
-                        totaldiscount += discount;
-                        if (actualQuantity == 0)
-                        {
-                            item.unitPrice = "0";
-                            note = "Hàng KM";
-                            item.itemName += " (Hàng KM)";
-                        }
-                        lstItem.Add(item);
-                        stt++; // Tăng stt cho item tiếp theo
                     }
                 }
             }
 
-            SummarizeInfo objSummary = new SummarizeInfo();
-
-            objSummary.discountAmount = totaldiscount.ToString();
-            objSummary.sumOfTotalLineAmountWithoutTax = sumTotalAmountWithoutTax.ToString();
-            objSummary.totalAmountWithoutTax = (sumTotalAmountWithoutTax- totaldiscount).ToString();
-            objSummary.totalAmountWithTax = (totalamountwithtax - totaldiscount).ToString();
-            // Tax percentage trong summary - lấy từ order đầu tiên (chỉ để hiển thị, không ảnh hưởng tính toán)
-            //objSummary.taxPercentage = ds.Tables[0].Rows[0]["TaxPercent"].ToString();
-            objSummary.taxPercentage = tax.ToString();//Convert.ToInt32(ds.Tables[0].Rows[0]["TaxPercent"]).ToString();
-            objSummary.totalAmountWithTaxInWords = NumberUtil.DocSoThanhChu(objSummary.totalAmountWithTax.Replace("-", ""));
-            objSummary.totalTaxAmount = totaltax.ToString();
-            
-            // Tạo danh sách tax breakdowns từ các tax percentage khác nhau trong items
-            Dictionary<double, double> taxBreakdowns = new Dictionary<double, double>(); // Key: taxPercentage, Value: taxableAmount
-            Dictionary<double, double> taxAmounts = new Dictionary<double, double>(); // Key: taxPercentage, Value: taxAmount
-            
-            foreach (var itemInfo in lstItem)
+            if (allItems.Count == 0)
             {
-                double itemTaxPct = double.Parse(itemInfo.taxPercentage);
-                double itemTaxableAmount = double.Parse(itemInfo.itemTotalAmountWithoutTax) - (double.Parse(itemInfo.itemTotalAmountWithoutTax) * (double.Parse(itemInfo.discount) / 100));
-                double itemTaxAmt = double.Parse(itemInfo.taxAmount);
-                
-                if (taxBreakdowns.ContainsKey(itemTaxPct))
-                {
-                    taxBreakdowns[itemTaxPct] += itemTaxableAmount;
-                    taxAmounts[itemTaxPct] += itemTaxAmt;
-                }
-                else
-                {
-                    taxBreakdowns[itemTaxPct] = itemTaxableAmount;
-                    taxAmounts[itemTaxPct] = itemTaxAmt;
-                }
+                return new List<SplitInvoiceRequest>();
             }
 
+            var taxGroups = allItems.GroupBy(i => i.taxPercentage).OrderBy(g => g.Key).ToList();
+            var results = new List<SplitInvoiceRequest>();
 
-            //-------------------------------
-            string str = @"{    ""generalInvoiceInfo"": " +
-                   @"{       ""invoiceType"":""" + objInvoice.invoiceType +
-                   @""",       ""templateCode"":""" + objInvoice.templateCode +
-                   @""", 	""invoiceSeries"":""" + objInvoice.invoiceSeries +
-                   @""",       ""transactionUuid"": """ + objInvoice.uuId +
-                   @""",       ""invoiceIssuedDate"":" + objInvoice.invoiceIssuedDate +   
-                   @",       ""currencyCode"":""" + objInvoice.currencyCode + @""", 
-                    ""adjustmentType"":""" + objInvoice.adjustmentType + @""",  
-                    ""paymentStatus"":" + objInvoice.paymentStatus + @",
-                    ""paymentTypeName"": """ + objInvoice.paymentType + @""",
-                    ""cusGetInvoiceRight"":" + objInvoice.cusGetInvoiceRight + @",      
-                    ""buyerIdNo"":""" + objInvoice.buyerIdNo + @""",        
-                    ""buyerIdType"":""" + objInvoice.buyerIdType + @"""    },    
-                    ""buyerInfo"":{              
-                    ""buyerLegalName"":""" + objBuyer.buyerLegalName + @""",  
-                    ""buyerName"":""" + objBuyer.buyerName + @""",
-                    ""buyerTaxCode"":""" + objBuyer.buyerTaxCode + @""",      
-                    ""buyerAddressLine"":""" + objBuyer.buyerAddressLine + @""",       
-                    ""buyerPhoneNumber"":""" + objBuyer.buyerPhoneNumber + @""",      
-                    ""buyerEmail"":""" + objBuyer.buyerEmail + @""",      
-                    ""buyerIdNo"":""" + objBuyer.buyerIdNo + @""",   
-                    ""buyerIdType"":""" + objBuyer.buyerIdType + @"""    },
-                    ""payments"":[  {""paymentMethodName"":""" + objInvoice.paymentType + @"""    }    ],    
-                    ""deliveryInfo"":{     },
-                    ""itemInfo"":[       ";
-            int indexItem = 1;
-
-            foreach (var itemInfo in lstItem)
+            foreach (var group in taxGroups)
             {
-                str += @"{""lineNumber"":" + indexItem + @",          
-                    ""itemCode"":""" + itemInfo.itemCode + @""",    
-                    ""itemName"":""" + itemInfo.itemName.Replace("\r", "  ").Trim() + @""",
-                    ""unitName"":""" + itemInfo.unitName + @""",     
-                    ""unitPrice"":" + itemInfo.unitPrice + @",             
-                    ""quantity"":" + itemInfo.quantity + @",               
-                    ""itemTotalAmountWithoutTax"":" + itemInfo.itemTotalAmountWithoutTax + @",               
-                    ""taxPercentage"":" + itemInfo.taxPercentage + @",              
-                    ""taxAmount"":" + itemInfo.taxAmount + @",              
-                    ""discount"":" + itemInfo.discount + @",  
-                    ""itemDiscount"":" + itemInfo.itemDiscount;
-
-                // ✅ Chỉ thêm specialInfo nếu có giá trị
-                if (!string.IsNullOrEmpty(itemInfo.specialInfo?.value))
+                var lstItem = group.ToList();
+                for (int idx = 0; idx < lstItem.Count; idx++)
                 {
-                    str += @",
-                        ""selection"":" + 6 + @",
-                        ""itemType"":" + 2 + @",
-                        ""specialInfo"": [
-                            {
-                                ""name"": """ + itemInfo.specialInfo.name + @""",
-                                ""value"": """ + itemInfo.specialInfo.value + @"""
-                            }
-                        ]";
+                    lstItem[idx].lineNumber = (idx + 1).ToString();
                 }
 
-                str += "}";
+                double taxPct = double.Parse(group.Key);
+                objInvoice.uuId = System.Guid.NewGuid().ToString();
+                objInvoice.invoiceIssuedDate = ((Int64)(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1))).TotalMilliseconds).ToString();
 
-                // ✅ Xử lý dấu phẩy cho các phần tử
-                if (indexItem != lstItem.Count)
-                    str += " , ";
-                //if (lstVouchers.Count != 0 && indexItem == lstItem.Count)
-                //    str += " , ";
-
-                indexItem++;
+                results.Add(new SplitInvoiceRequest
+                {
+                    TaxPercent = taxPct,
+                    RequestJson = BuildInvoiceJson(objInvoice, objBuyer, lstItem, taxPct)
+                });
             }
 
-
-            str += @"],    
-                    ""discountItemInfo"":[     ],   
-                    ""summarizeInfo"":{       
-                    ""sumOfTotalLineAmountWithoutTax"":" + objSummary.sumOfTotalLineAmountWithoutTax + @",          
-                    ""totalAmountWithoutTax"":" + objSummary.totalAmountWithoutTax + @",   
-                    ""totalTaxAmount"":" + objSummary.totalTaxAmount + @",  
-                    ""totalAmountWithTax"":" + objSummary.totalAmountWithTax + @",  
-                    ""totalAmountWithTaxInWords"":""" + objSummary.totalAmountWithTaxInWords + @""",       
-                    ""discountAmount"":" + objSummary.discountAmount + @",  
-                    ""taxPercentage"":" + objSummary.taxPercentage + @"  },    
-                    ""taxBreakdowns"":[";
-            
-            // Tạo taxBreakdowns động từ các tax percentage khác nhau
-            int taxBreakdownIndex = 0;
-            foreach (var kvp in taxBreakdowns)
-            {
-                if (taxBreakdownIndex > 0)
-                    str += ",";
-                str += @"       {         
-                   ""taxPercentage"":" + kvp.Key.ToString() + @",                    
-                    ""taxableAmount"": " + Math.Round(kvp.Value, 0, MidpointRounding.AwayFromZero).ToString() + @",
-                    ""taxAmount"": " + Math.Round(taxAmounts[kvp.Key], 0, MidpointRounding.AwayFromZero).ToString() + @"       }";
-                taxBreakdownIndex++;
-            }
-            
-            str += @"    ] } ";
-
-
-            return str;
+            return results;
         }
         private string createInvoiceDraftExample()
         {
@@ -1772,91 +1818,160 @@ namespace InvoiceClient
                 string contentType = "application/json";
 
                 int chk = chkExample.Checked ? 1 : 0;
-                string request = "";
 
                 if (chk == 1)
                 {
-                    request = createInvoiceExample(listIds);
-                    txtjson.Text = request;
+                    List<SplitInvoiceRequest> invoiceRequests = createInvoiceExamples(listIds);
+                    if (invoiceRequests == null || invoiceRequests.Count == 0)
+                    {
+                        return;
+                    }
+
+                    if (invoiceRequests.Count > 1)
+                    {
+                        MessageBox.Show(
+                            $"Đơn có {invoiceRequests.Count} mức thuế VAT khác nhau. Hệ thống sẽ tạo {invoiceRequests.Count} hóa đơn riêng trên Viettel.",
+                            "Thông báo",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Information);
+                    }
+
+                    txtjson.Text = string.Join("\r\n\r\n", invoiceRequests.Select(r => r.RequestJson));
+
+                    List<string> viettelInvoiceNos = new List<string>();
+                    foreach (var invReq in invoiceRequests)
+                    {
+                        string result = CreateRequest.webRequestV2(apiLink, invReq.RequestJson, strAccessToken, "POST", contentType, proxy, port, ssl);
+
+                        sohoadon_vtel = "";
+                        string[] sohoadon = result.Split(',');
+                        for (int i = 0; i < sohoadon.Length; i++)
+                        {
+                            if (sohoadon[i].ToString().Contains("invoiceNo") == true)
+                            {
+                                sohoadon_vtel = sohoadon[i].Split(':')[1].ToString().Replace("\"", "").Trim();
+                                break;
+                            }
+                        }
+
+                        if (string.IsNullOrEmpty(sohoadon_vtel))
+                        {
+                            MessageBox.Show($"Không thể lấy số hóa đơn từ kết quả trả về (VAT {invReq.TaxPercent:G0}%)!");
+                            return;
+                        }
+
+                        viettelInvoiceNos.Add(sohoadon_vtel);
+                    }
+
+                    string combinedInvoiceNos = string.Join(",", viettelInvoiceNos);
+
+                    // Update database cho tất cả các ID đã chọn
+                    string dtNow = DateTime.Today.ToString("dd-MMM-yyyy");
+                    cnn.Open();
+                    string idsForSql = string.Join("','", listIds);
+                    string sqlupdate = "update Orders_viettel set DateInvViettel= '" + dtNow + "', InvoiceNoViettel = '" + combinedInvoiceNos + "', mauso = '" + txtmauso.Text + "' where id in ('" + idsForSql + "')";
+                    SqlCommand comupdate = new SqlCommand(sqlupdate, cnn);
+                    comupdate.ExecuteNonQuery();
+                    cnn.Close();
+
+                    MessageBox.Show("OK - Số HĐ Viettel: " + combinedInvoiceNos);
+
+                    // Lấy PDF và gửi email cho customer
+                    try
+                    {
+                        string customerPhone = selectedRows[0].Cells["CustomerPhone"]?.Value?.ToString()?.Trim() ?? "";
+                        string customerName = selectedRows[0].Cells["CustomerName"]?.Value?.ToString()?.Trim() ?? "";
+                        string customerEmail = GetCustomerEmail(customerPhone, customerName);
+
+                        if (!string.IsNullOrEmpty(customerEmail))
+                        {
+                            foreach (string invoiceNo in viettelInvoiceNos)
+                            {
+                                string pdfPath = GetInvoicePDF(invoiceNo, txtmauso.Text);
+                                if (!string.IsNullOrEmpty(pdfPath) && File.Exists(pdfPath))
+                                {
+                                    SendInvoiceEmail(customerEmail, customerName, invoiceNo, pdfPath);
+                                }
+                            }
+                        }
+                        else
+                        {
+                            MessageBox.Show("Customer chưa có email. Không thể gửi email hóa đơn.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        }
+                    }
+                    catch (Exception emailEx)
+                    {
+                        log.Error($"Lỗi khi gửi email: {emailEx.Message}");
+                        MessageBox.Show($"Lỗi khi gửi email: {emailEx.Message}", "Cảnh báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    }
                 }
                 else
                 {
-                    request = txtBody.Text;
+                    string request = txtBody.Text;
                     if (string.IsNullOrEmpty(request))
                     {
                         MessageBox.Show("Chưa nhập giá trị text của body");
                         return;
                     }
-                }
 
-                string result = CreateRequest.webRequestV2(apiLink, request, strAccessToken, "POST", contentType, proxy, port, ssl);
-                //txterror.Text = result;
+                    string result = CreateRequest.webRequestV2(apiLink, request, strAccessToken, "POST", contentType, proxy, port, ssl);
 
-                // Parse invoiceNo từ result
-                sohoadon_vtel = "";
-                string[] sohoadon = result.Split(',');
-                for (int i = 0; i < sohoadon.Length; i++)
-                {
-                    if (sohoadon[i].ToString().Contains("invoiceNo") == true)
+                    sohoadon_vtel = "";
+                    string[] sohoadon = result.Split(',');
+                    for (int i = 0; i < sohoadon.Length; i++)
                     {
-                        sohoadon_vtel = sohoadon[i].Split(':')[1].ToString().Replace("\"", "").Trim();
-                        break;
-                    }
-                }
-
-                if (string.IsNullOrEmpty(sohoadon_vtel))
-                {
-                    MessageBox.Show("Không thể lấy số hóa đơn từ kết quả trả về!");
-                    return;
-                }
-
-                // Update database cho tất cả các ID đã chọn
-                string dtNow = DateTime.Today.ToString("dd-MMM-yyyy");
-                cnn.Open();
-                // Tạo danh sách ID với dấu nháy đơn cho SQL IN clause
-                string idsForSql = string.Join("','", listIds);
-                string sqlupdate = "update Orders_viettel set DateInvViettel= '" + dtNow + "', InvoiceNoViettel = '" + sohoadon_vtel + "', mauso = '" + txtmauso.Text + "' where id in ('" + idsForSql + "')";
-                SqlCommand comupdate = new SqlCommand(sqlupdate, cnn);
-                comupdate.ExecuteNonQuery();
-
-                cnn.Close();  // đóng kết nối
-
-                MessageBox.Show("OK " + result);
-
-                // Lấy PDF và gửi email cho customer
-                try
-                {
-                    // Lấy thông tin customer từ dòng đầu tiên đã chọn
-                    string customerPhone = selectedRows[0].Cells["CustomerPhone"]?.Value?.ToString()?.Trim() ?? "";
-                    string customerName = selectedRows[0].Cells["CustomerName"]?.Value?.ToString()?.Trim() ?? "";
-                    
-                    // Lấy email của customer từ database
-                    string customerEmail = GetCustomerEmail(customerPhone, customerName);
-                    
-                    if (!string.IsNullOrEmpty(customerEmail))
-                    {
-                        // Lấy PDF file
-                        string pdfPath = GetInvoicePDF(sohoadon_vtel, txtmauso.Text);
-                        
-                        if (!string.IsNullOrEmpty(pdfPath) && File.Exists(pdfPath))
+                        if (sohoadon[i].ToString().Contains("invoiceNo") == true)
                         {
-                            // Gửi email với PDF đính kèm
-                            SendInvoiceEmail(customerEmail, customerName, sohoadon_vtel, pdfPath);
+                            sohoadon_vtel = sohoadon[i].Split(':')[1].ToString().Replace("\"", "").Trim();
+                            break;
+                        }
+                    }
+
+                    if (string.IsNullOrEmpty(sohoadon_vtel))
+                    {
+                        MessageBox.Show("Không thể lấy số hóa đơn từ kết quả trả về!");
+                        return;
+                    }
+
+                    string dtNow = DateTime.Today.ToString("dd-MMM-yyyy");
+                    cnn.Open();
+                    string idsForSql = string.Join("','", listIds);
+                    string sqlupdate = "update Orders_viettel set DateInvViettel= '" + dtNow + "', InvoiceNoViettel = '" + sohoadon_vtel + "', mauso = '" + txtmauso.Text + "' where id in ('" + idsForSql + "')";
+                    SqlCommand comupdate = new SqlCommand(sqlupdate, cnn);
+                    comupdate.ExecuteNonQuery();
+                    cnn.Close();
+
+                    MessageBox.Show("OK " + result);
+
+                    try
+                    {
+                        string customerPhone = selectedRows[0].Cells["CustomerPhone"]?.Value?.ToString()?.Trim() ?? "";
+                        string customerName = selectedRows[0].Cells["CustomerName"]?.Value?.ToString()?.Trim() ?? "";
+                        string customerEmail = GetCustomerEmail(customerPhone, customerName);
+
+                        if (!string.IsNullOrEmpty(customerEmail))
+                        {
+                            string pdfPath = GetInvoicePDF(sohoadon_vtel, txtmauso.Text);
+
+                            if (!string.IsNullOrEmpty(pdfPath) && File.Exists(pdfPath))
+                            {
+                                SendInvoiceEmail(customerEmail, customerName, sohoadon_vtel, pdfPath);
+                            }
+                            else
+                            {
+                                MessageBox.Show("Không thể tải PDF hóa đơn để gửi email.", "Cảnh báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            }
                         }
                         else
                         {
-                            MessageBox.Show("Không thể tải PDF hóa đơn để gửi email.", "Cảnh báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            MessageBox.Show("Customer chưa có email. Không thể gửi email hóa đơn.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
                         }
                     }
-                    else
+                    catch (Exception emailEx)
                     {
-                        MessageBox.Show("Customer chưa có email. Không thể gửi email hóa đơn.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        log.Error($"Lỗi khi gửi email: {emailEx.Message}");
+                        MessageBox.Show($"Lỗi khi gửi email: {emailEx.Message}", "Cảnh báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     }
-                }
-                catch (Exception emailEx)
-                {
-                    log.Error($"Lỗi khi gửi email: {emailEx.Message}");
-                    MessageBox.Show($"Lỗi khi gửi email: {emailEx.Message}", "Cảnh báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 }
             }
             catch (Exception ex)
@@ -1929,12 +2044,12 @@ namespace InvoiceClient
                     {
                         string serviceId = serviceIds[i];
                         
-                        // Lấy Production từ Services
+                        // Lấy Production, TaxPercent từ Services
                         if (cnn.State != ConnectionState.Open)
                         {
                             cnn.Open();
                         }
-                        string sqlServices = $"SELECT Production FROM Services WHERE id = '{serviceId}'";
+                        string sqlServices = $"SELECT Production, TaxPercent FROM Services WHERE id = '{serviceId}'";
                         SqlCommand comServices = new SqlCommand(sqlServices, cnn);
                         SqlDataAdapter daServices = new SqlDataAdapter(comServices);
                         DataTable dtServices = new DataTable();
@@ -1949,6 +2064,12 @@ namespace InvoiceClient
                                 double.TryParse(dtServices.Rows[0]["Production"].ToString(), out production);
                             }
 
+                            double taxPercent = 0;
+                            if (dtServices.Rows[0]["TaxPercent"] != null && dtServices.Rows[0]["TaxPercent"] != DBNull.Value)
+                            {
+                                double.TryParse(dtServices.Rows[0]["TaxPercent"].ToString(), out taxPercent);
+                            }
+
                             // Chỉ convert khi Production > 0, nếu Production = 0 hoặc null thì giữ nguyên
                             if (production > 0 && i < quantities.Count && i < unitPrices.Count)
                             {
@@ -1958,8 +2079,16 @@ namespace InvoiceClient
                                 // promotionQuantity mới = Production * promotionQuantity hiện tại
                                 int promotionQuantityNew = i < promotionQuantities.Count ? (int)(production * promotionQuantities[i]) : 0;
                                 
-                                // unitPrice mới = unitPrice hiện tại / Production (không làm tròn)
-                                double unitPriceNew = unitPrices[i] / production;
+                                // UnitPrice trong DB đã gồm thuế → tách giá trước thuế theo TaxPercent của service, rồi convert
+                                double unitPriceWithTax = unitPrices[i];
+                                double unitPriceBeforeTax = taxPercent > 0
+                                    ? unitPriceWithTax / (1 + taxPercent / 100)
+                                    : unitPriceWithTax;
+                                double unitPriceNewBeforeTax = unitPriceBeforeTax / production;
+                                // Lưu lại UnitPrice đã gồm thuế
+                                double unitPriceNew = taxPercent > 0
+                                    ? unitPriceNewBeforeTax * (1 + taxPercent / 100)
+                                    : unitPriceNewBeforeTax;
 
                                 quantities[i] = quantityNew;
                                 if (i < promotionQuantities.Count)
@@ -2172,62 +2301,127 @@ namespace InvoiceClient
                     List<string> listIds = grp.Select(r => r.Cells["id"].Value.ToString().Trim()).Distinct().ToList();
                     string customername_invoiceno = grp.First().Cells["CustomerName"]?.Value?.ToString()?.Trim() ?? "";
 
-                    frmInputInvoiceNo frmInput = new frmInputInvoiceNo(customername_invoiceno);
-                    if (frmInput.ShowDialog() != DialogResult.OK)
-                    {
-                        return;
-                    }
-
-                    sohoadon_noibo = frmInput.InvoiceNo;
-
-                    string request = "";
-
                     if (chk == 1)
                     {
-                        request = createInvoiceExample(listIds);
-                        txtjson.Text = request;
+                        List<SplitInvoiceRequest> invoiceRequests = createInvoiceExamples(listIds);
+                        if (invoiceRequests == null || invoiceRequests.Count == 0)
+                        {
+                            return;
+                        }
+
+                        if (invoiceRequests.Count > 1)
+                        {
+                            MessageBox.Show(
+                                $"Đơn có {invoiceRequests.Count} mức thuế VAT khác nhau. Hệ thống sẽ tạo {invoiceRequests.Count} hóa đơn nháp riêng trên Viettel.",
+                                "Thông báo",
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Information);
+                        }
+
+                        txtjson.Text = string.Join("\r\n\r\n", invoiceRequests.Select(r => r.RequestJson));
+
+                        List<string> draftInvoiceNos = new List<string>();
+                        string baseInvoiceNo = null;
+
+                        if (invoiceRequests.Count > 1)
+                        {
+                            frmInputInvoiceNo frmInputBase = new frmInputInvoiceNo(customername_invoiceno);
+                            frmInputBase.Text = "Nhập số hóa đơn nội bộ (tách theo VAT)";
+                            if (frmInputBase.ShowDialog() != DialogResult.OK)
+                            {
+                                return;
+                            }
+                            baseInvoiceNo = frmInputBase.InvoiceNo;
+                        }
+
+                        foreach (var invReq in invoiceRequests)
+                        {
+                            if (invoiceRequests.Count > 1)
+                            {
+                                sohoadon_noibo = baseInvoiceNo + "_VAT" + invReq.TaxPercent.ToString("G0", System.Globalization.CultureInfo.InvariantCulture);
+                            }
+                            else
+                            {
+                                frmInputInvoiceNo frmInput = new frmInputInvoiceNo(customername_invoiceno);
+                                if (frmInput.ShowDialog() != DialogResult.OK)
+                                {
+                                    return;
+                                }
+                                sohoadon_noibo = frmInput.InvoiceNo;
+                            }
+
+                            string result = CreateRequest.webRequestV2(apiLink, invReq.RequestJson, strAccessToken, "POST", contentType, proxy, port, ssl);
+                            MessageBox.Show(result);
+
+                            try
+                            {
+                                string pdfBase64 = ExtractDraftPdfBase64(result);
+                                SaveDraftPdf(sohoadon_noibo, pdfBase64);
+                            }
+                            catch (Exception pdfEx)
+                            {
+                                MessageBox.Show($"Lỗi lưu PDF (VAT {invReq.TaxPercent:G0}%): {pdfEx.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                                return;
+                            }
+
+                            draftInvoiceNos.Add(sohoadon_noibo);
+                        }
+
+                        string combinedDraftNos = string.Join(",", draftInvoiceNos);
+                        cnn.Open();
+                        string idsForSql = string.Join("','", listIds);
+                        string sqlupdate = "update Orders_viettel set IsDraft=1 , hoadonnoibo ='" + combinedDraftNos + "' where id in ('" + idsForSql + "')";
+                        SqlCommand comupdate = new SqlCommand(sqlupdate, cnn);
+                        comupdate.ExecuteNonQuery();
+
+                        string sqlupdate_orders = "update Orders set IsDraft=1 , hoadonnoibo ='" + combinedDraftNos + "' where id in ('" + idsForSql + "')";
+                        SqlCommand comupdate_orders = new SqlCommand(sqlupdate_orders, cnn);
+                        comupdate_orders.ExecuteNonQuery();
+
+                        cnn.Close();
+                        MessageBox.Show("OK - Đã tạo " + draftInvoiceNos.Count + " hóa đơn nháp: " + combinedDraftNos);
                     }
                     else
                     {
-                        request = txtBody.Text;
+                        frmInputInvoiceNo frmInput = new frmInputInvoiceNo(customername_invoiceno);
+                        if (frmInput.ShowDialog() != DialogResult.OK)
+                        {
+                            return;
+                        }
+
+                        sohoadon_noibo = frmInput.InvoiceNo;
+                        string request = txtBody.Text;
                         if (string.IsNullOrEmpty(request))
                         {
                             MessageBox.Show("Chưa nhập giá trị text của body");
                             return;
                         }
+
+                        string result = CreateRequest.webRequestV2(apiLink, request, strAccessToken, "POST", contentType, proxy, port, ssl);
+                        MessageBox.Show(result);
+                        try
+                        {
+                            string pdfBase64 = ExtractDraftPdfBase64(result);
+                            SaveDraftPdf(sohoadon_noibo, pdfBase64);
+                        }
+                        catch (Exception pdfEx)
+                        {
+                            MessageBox.Show("Lỗi lưu PDF: " + pdfEx.Message, "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            return;
+                        }
+                        cnn.Open();
+                        string idsForSql = string.Join("','", listIds);
+                        string sqlupdate = "update Orders_viettel set IsDraft=1 , hoadonnoibo ='" + sohoadon_noibo + "' where id in ('" + idsForSql + "')";
+                        SqlCommand comupdate = new SqlCommand(sqlupdate, cnn);
+                        comupdate.ExecuteNonQuery();
+
+                        string sqlupdate_orders = "update Orders set IsDraft=1 , hoadonnoibo ='" + sohoadon_noibo + "' where id in ('" + idsForSql + "')";
+                        SqlCommand comupdate_orders = new SqlCommand(sqlupdate_orders, cnn);
+                        comupdate_orders.ExecuteNonQuery();
+
+                        cnn.Close();
+                        MessageBox.Show("OK " + result);
                     }
-
-                    if (string.IsNullOrEmpty(request))
-                    {
-                        return;
-                    }
-
-                    string result = CreateRequest.webRequestV2(apiLink, request, strAccessToken, "POST", contentType, proxy, port, ssl);
-                    MessageBox.Show(result);
-                    string fileName = sohoadon_noibo;
-                    string[] tach;
-                    tach = result.Split(',');
-                    string[] tachok;
-                    tachok = tach[2].Split(':');
-                    string tachcuoi = tachok[1].Replace("\"", "");
-                    string pdfPath = "c:\\temp\\" + fileName + ".pdf";
-                    using (System.IO.FileStream stream = System.IO.File.Create(pdfPath))
-                    {
-                        System.Byte[] byteArray = System.Convert.FromBase64String(tachcuoi);
-                        stream.Write(byteArray, 0, byteArray.Length);
-                    }
-                    cnn.Open();
-                    string idsForSql = string.Join("','", listIds);
-                    string sqlupdate = "update Orders_viettel set IsDraft=1 , hoadonnoibo ='" + sohoadon_noibo + "' where id in ('" + idsForSql + "')";
-                    SqlCommand comupdate = new SqlCommand(sqlupdate, cnn);
-                    comupdate.ExecuteNonQuery();
-
-                    string sqlupdate_orders = "update Orders set IsDraft=1 , hoadonnoibo ='" + sohoadon_noibo + "' where id in ('" + idsForSql + "')";
-                    SqlCommand comupdate_orders = new SqlCommand(sqlupdate_orders, cnn);
-                    comupdate_orders.ExecuteNonQuery();
-
-                    cnn.Close();
-                    MessageBox.Show("OK " + result);
                 }
 
                 // Gửi email với PDF đính kèm cho customer

@@ -456,19 +456,21 @@ namespace InvoiceClient
             // label4
             // 
             this.label4.AutoSize = true;
-            this.label4.Location = new System.Drawing.Point(531, 123);
+            this.label4.Location = new System.Drawing.Point(531, 153);
             this.label4.Name = "label4";
             this.label4.Size = new System.Drawing.Size(40, 13);
             this.label4.TabIndex = 47;
             this.label4.Text = "Vat (%)";
+            this.label4.Visible = false;
             // 
             // txtvat
             // 
-            this.txtvat.Location = new System.Drawing.Point(625, 121);
+            this.txtvat.Location = new System.Drawing.Point(625, 151);
             this.txtvat.Name = "txtvat";
             this.txtvat.Size = new System.Drawing.Size(77, 20);
             this.txtvat.TabIndex = 46;
             this.txtvat.Text = "10.00";
+            this.txtvat.Visible = false;
             this.txtvat.KeyPress += new System.Windows.Forms.KeyPressEventHandler(this.txtvat_KeyPress);
             this.txtvat.Leave += new System.EventHandler(this.txtvat_Leave);
             // 
@@ -491,7 +493,7 @@ namespace InvoiceClient
             // 
             // txtinvseries
             // 
-            this.txtinvseries.Location = new System.Drawing.Point(787, 120);
+            this.txtinvseries.Location = new System.Drawing.Point(625, 121);
             this.txtinvseries.Name = "txtinvseries";
             this.txtinvseries.Size = new System.Drawing.Size(77, 20);
             this.txtinvseries.TabIndex = 51;
@@ -500,7 +502,7 @@ namespace InvoiceClient
             // label9
             // 
             this.label9.AutoSize = true;
-            this.label9.Location = new System.Drawing.Point(708, 123);
+            this.label9.Location = new System.Drawing.Point(532, 124);
             this.label9.Name = "label9";
             this.label9.Size = new System.Drawing.Size(73, 13);
             this.label9.TabIndex = 50;
