@@ -36,7 +36,7 @@ namespace InvoiceClient
         string sohoadon_vtel;
         string sohoadon_noibo;
         //string templatecode;
-        SqlConnection cnn = new SqlConnection(@"Data Source=115.78.95.245;Initial Catalog=NPPBaoNgoc@;Integrated Security=false;user id=sa;password=qwerQWER1234!@#$");
+        SqlConnection cnn = new SqlConnection(@"Data Source=115.78.8.173;Initial Catalog=NPPBaoNgoc@;Integrated Security=false;user id=sa;password=qwerQWER1234!@#$");
         // Lưu DataTable gốc để filter
         DataTable dtCustomers = null;
         DataTable dtEmployees = null;
@@ -77,7 +77,7 @@ namespace InvoiceClient
                 string paymentDatePattern = "\"paymentDate\":\"";
                 int patternLength = paymentDatePattern.Length; // 15 ký tự
                 
-                sql = "SELECT c.Name As [Tên Quán],o.CustomerPhone as SĐT,o.CustomerAddress as [Địa Chỉ],o.ServiceNames as [Items],o.ServiceQuantities as [Số Lượng],o.promotionquantities as [Số Lượng Khuyến Mãi],o.UnitPrice as [Unit Price],o.TotalPrice as [Total Price],o.Cashamount as [Cash Amount],o.Transferamount as [Transfer Amount],o.CreatedAt as [Created At],o.PaymentStatus as [Payment Status],o.DeliveryStatus as [Delivery Status],o.IsDraft,o.InvoiceNoViettel as [Invoice No Viettel],o.PaymentHistory," +
+                sql = "SELECT c.Name As [Tên Quán],o.CustomerPhone as SĐT,o.CustomerAddress as [Địa Chỉ],o.ServiceNames as [Items],o.ServiceQuantities as [Số Lượng],o.promotionquantities as [Số Lượng Khuyến Mãi],o.UnitPrice as [Unit Price],o.TotalPrice as [Total Price],o.Cashamount as [Cash Amount],o.Transferamount as [Transfer Amount],o.CreatedAt as [Created At],o.PaymentStatus as [Payment Status],o.DeliveryStatus as [Delivery Status],o.IsDraft,o.InvoiceNoViettel as [Invoice No Viettel],o.daxuatthanhcong as [Đã Xuất HĐ],o.PaymentHistory," +
                       "c.TaxCode as [Mã Số Thuế],c.Identification as [CCCD/CMND],CASE WHEN c.Identification IS NOT NULL AND c.Identification != '' THEN c.CustomerName ELSE NULL END as [Tên Cá Nhân],c.InvoiceName as [Tên Đơn Vị],c.InvoiceAddress as [Địa Chỉ Invoice],o.* " +
                       "FROM Orders_viettel o " +
                       "LEFT JOIN Customers c ON o.CustomerName = c.Name " +
@@ -94,7 +94,7 @@ namespace InvoiceClient
             }
             else
             {
-                sql = "SELECT c.Name As [Tên Quán],o.CustomerPhone as SĐT,o.CustomerAddress as [Địa Chỉ],o.ServiceNames as [Items],o.ServiceQuantities as [Số Lượng],o.promotionquantities as [Số Lượng Khuyến Mãi],o.UnitPrice as [Unit Price],o.TotalPrice as [Total Price],o.Cashamount as [Cash Amount],o.Transferamount as [Transfer Amount],o.CreatedAt as [Created At],o.PaymentStatus as [Payment Status],o.DeliveryStatus as [Delivery Status],o.IsDraft,o.InvoiceNoViettel as [Invoice No Viettel]," +
+                sql = "SELECT c.Name As [Tên Quán],o.CustomerPhone as SĐT,o.CustomerAddress as [Địa Chỉ],o.ServiceNames as [Items],o.ServiceQuantities as [Số Lượng],o.promotionquantities as [Số Lượng Khuyến Mãi],o.UnitPrice as [Unit Price],o.TotalPrice as [Total Price],o.Cashamount as [Cash Amount],o.Transferamount as [Transfer Amount],o.CreatedAt as [Created At],o.PaymentStatus as [Payment Status],o.DeliveryStatus as [Delivery Status],o.IsDraft,o.InvoiceNoViettel as [Invoice No Viettel],o.daxuatthanhcong as [Đã Xuất HĐ]," +
                       "c.TaxCode as [Mã Số Thuế],c.Identification as [CCCD/CMND],CASE WHEN c.Identification IS NOT NULL AND c.Identification != '' THEN c.CustomerName ELSE NULL END as [Tên Cá Nhân],c.InvoiceName as [Tên Đơn Vị],c.InvoiceAddress as [Địa Chỉ Invoice],o.* " +
                       "FROM Orders_viettel o " +
                       "LEFT JOIN Customers c ON o.CustomerName = c.Name " +
@@ -152,7 +152,8 @@ namespace InvoiceClient
             SetColumnVisibleAndOrder("Tên Cá Nhân", true, displayIndex++);
             SetColumnVisibleAndOrder("Tên Đơn Vị", true, displayIndex++);
             SetColumnVisibleAndOrder("Địa Chỉ Invoice", true, displayIndex++);
-            
+            SetColumnVisibleAndOrder("Đã Xuất HĐ", true, displayIndex++);
+
             SetColumnVisible("SĐT", false);
             SetColumnVisible("Địa Chỉ", false);
             SetColumnVisible("Items", false);
@@ -329,7 +330,9 @@ namespace InvoiceClient
                 { "Transferamount", "Transfer Amount" },
                 { "CreatedAt", "Created At" },
                 { "PaymentStatus", "Payment Status" },
-                { "InvoiceNoViettel", "Invoice No Viettel" }
+                { "InvoiceNoViettel", "Invoice No Viettel" },
+                { "daxuatthanhcong", "Ðã Xu?t HÐ" },
+
             };
             
             // Tìm trong mapping
@@ -503,7 +506,7 @@ namespace InvoiceClient
         {
             try
             {
-                // getAccessToken();
+                getAccessToken();
                 if (string.IsNullOrEmpty(strAccessToken))
                 {
                     MessageBox.Show("Chưa lấy giá tị Token");
@@ -537,7 +540,7 @@ namespace InvoiceClient
 
                 PDFFileResponse objFile = JsonConvert.DeserializeObject<PDFFileResponse>(result);
                 string fileName = objFile.fileName;
-                string path = "c:\\temp\\" + fileName;
+                string path = "c:\\temp_HD_Thuc\\" + fileName;
                 File.WriteAllBytes(path, objFile.fileToBytes);
 
                 MessageBox.Show("File in " + path);
@@ -1172,6 +1175,7 @@ namespace InvoiceClient
             dscus.Tables.Add(dtcus);
             cnn.Close();  // đóng kết nối
             // đổ dữ liệu vào kho
+            bool check_ngtieudung = false;
             if (dscus != null)
             {
                 if (dscus.Tables[0].Rows.Count > 0)
@@ -1195,37 +1199,48 @@ namespace InvoiceClient
                     else
                     {
                         chkcanhan.Checked = false;
+                        check_ngtieudung = true;
+
                         //HotenBuyer = dscus.Tables[0].Rows[0]["CustomerName"]?.ToString() ?? "";
-                        Company = dscus.Tables[0].Rows[0]["Name"]?.ToString() ?? "";
+                        //Company = dscus.Tables[0].Rows[0]["Name"]?.ToString() ?? "";
+                        HotenBuyer = "BÁN CHO NGƯỜI TIÊU DÙNG";
                     }
 
-                    if (chkcanhan.Checked == false)
+                    if(check_ngtieudung == false)
                     {
-                        if (string.IsNullOrEmpty(TaxCode))
+                        if (chkcanhan.Checked == false)
                         {
-                            MessageBox.Show("Customer chưa có Tax Code !", "Cảnh báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            if (string.IsNullOrEmpty(TaxCode))
+                            {
+                                MessageBox.Show("Customer chưa có Tax Code !", "Cảnh báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
 
+                            }
                         }
                     }
+                    
 
-                    Address = dscus.Tables[0].Rows[0]["InvoiceAddress"].ToString();
-            
-
-                    if (chkcanhan.Checked == true) 
+                    if (check_ngtieudung == false)
                     {
-                        if (!string.IsNullOrEmpty(dscus.Tables[0].Rows[0]["Identification"].ToString()))
+                        Address = dscus.Tables[0].Rows[0]["InvoiceAddress"].ToString();
+                        Tel = dscus.Tables[0].Rows[0]["phone"].ToString();
+                        buyerName_ = dscus.Tables[0].Rows[0]["Name"].ToString();
+
+                        if (chkcanhan.Checked == true)
                         {
-                            cccd = dscus.Tables[0].Rows[0]["Identification"].ToString();
-                        }
-                        else
-                        {
-                            MessageBox.Show("Nhập CCCD cho customer Để xuất HĐ Cá Nhân!", "Vui thử lại", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                            return new List<SplitInvoiceRequest>();
+                            if (!string.IsNullOrEmpty(dscus.Tables[0].Rows[0]["Identification"].ToString()))
+                            {
+                                cccd = dscus.Tables[0].Rows[0]["Identification"].ToString();
+                            }
+                            else
+                            {
+                                MessageBox.Show("Nhập CCCD cho customer Để xuất HĐ Cá Nhân!", "Vui thử lại", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                                return new List<SplitInvoiceRequest>();
+                            }
+
                         }
                     }
+                  
 
-                    Tel = dscus.Tables[0].Rows[0]["phone"].ToString();
-                    buyerName_ = dscus.Tables[0].Rows[0]["Name"].ToString();
                 }
             }
 
@@ -1241,17 +1256,17 @@ namespace InvoiceClient
             objInvoice.paymentType = PTTT;
             objInvoice.paymentTypeName = PTTT;
             objInvoice.cusGetInvoiceRight = "true";
-            if (chkcanhan.Checked == true)
-            {
-                objInvoice.buyerIdNo = cccd.ToString();
-                objInvoice.buyerIdType = "1";
-            }
-            else
-            {
-                objInvoice.buyerIdNo = "";
-                objInvoice.buyerIdType = "";
-            }
-                
+        
+                if (chkcanhan.Checked == true && check_ngtieudung == false)
+                {
+                    objInvoice.buyerIdNo = cccd.ToString();
+                    objInvoice.buyerIdType = "1";
+                }
+                else
+                {
+                    objInvoice.buyerIdNo = "";
+                    objInvoice.buyerIdType = "";
+                }
 
             //Buyer Info
             BuyerInfo objBuyer = new BuyerInfo();
@@ -1264,12 +1279,29 @@ namespace InvoiceClient
             //{
             //    objBuyer.buyerTaxCode = TaxCode;
             //}
+            if(check_ngtieudung == false)
+            {
+                if (!string.IsNullOrEmpty(TaxCode))
+                {
+                    objBuyer.buyerTaxCode = TaxCode;
+                    objBuyer.buyerName = HotenBuyer;
+                    objBuyer.buyerLegalName = Company;
+                }
+                else
+                {
+                    objBuyer.buyerName = HotenBuyer;
+                }
 
-            objBuyer.buyerTaxCode = TaxCode;
-            objBuyer.buyerName = HotenBuyer;
-            objBuyer.buyerLegalName = Company;
+            }
+            else
+            {
+                    objBuyer.buyerName = HotenBuyer;
+            }
+
+
             objBuyer.buyerAddressLine = Address.Replace("\n", "").Replace("\r", "");
-            if (chkcanhan.Checked == true)
+
+            if (chkcanhan.Checked == true && check_ngtieudung == false)
             {
                 objBuyer.buyerIdNo = objInvoice.buyerIdNo;
                 objBuyer.buyerIdType = "1";
@@ -1663,6 +1695,7 @@ namespace InvoiceClient
             Search();
         }
 
+  
         private void lậpHóaĐơnToolStripMenuItem_Click(object sender, EventArgs e)
         {
             try
@@ -1732,6 +1765,13 @@ namespace InvoiceClient
                     // Kiểm tra HoaDonNoiBo
                     string hoaDonNoiBo = row.Cells["hoadonnoibo"]?.Value?.ToString()?.Trim() ?? "";
                     string invoice_no_viettel = row.Cells["InvoiceNoViettel"]?.Value?.ToString()?.Trim() ?? "";
+                    bool daxuatthanhcong = row.Cells["daxuatthanhcong"]?.Value is bool value && value;
+                    if(daxuatthanhcong == true)
+                    {
+                        MessageBox.Show("Đã xuất HĐ lên Viettel Không Xuất nữa nếu chưa thấy E-invoiceNo, liên hệ Addmin");
+                        return;
+                    }
+
                     if (isFirstRow)
                     {
                         firstHoaDonNoiBo = hoaDonNoiBo;
@@ -1752,6 +1792,9 @@ namespace InvoiceClient
                         MessageBox.Show("Xuất hiện dữ liệu đã có Số Hóa Đơn Viettel");
                         return;
                     }
+
+
+
                 }
 
                 // Tự động convert các orders chưa convert và lưu vào database
@@ -1865,113 +1908,187 @@ namespace InvoiceClient
 
                     string combinedInvoiceNos = string.Join(",", viettelInvoiceNos);
 
-                    // Update database cho tất cả các ID đã chọn
                     string dtNow = DateTime.Today.ToString("dd-MMM-yyyy");
-                    cnn.Open();
                     string idsForSql = string.Join("','", listIds);
-                    string sqlupdate = "update Orders_viettel set DateInvViettel= '" + dtNow + "', InvoiceNoViettel = '" + combinedInvoiceNos + "', mauso = '" + txtmauso.Text + "' where id in ('" + idsForSql + "')";
-                    SqlCommand comupdate = new SqlCommand(sqlupdate, cnn);
-                    comupdate.ExecuteNonQuery();
-                    cnn.Close();
 
-                    MessageBox.Show("OK - Số HĐ Viettel: " + combinedInvoiceNos);
+                    cnn.Open();
 
-                    // Lấy PDF và gửi email cho customer
                     try
                     {
-                        string customerPhone = selectedRows[0].Cells["CustomerPhone"]?.Value?.ToString()?.Trim() ?? "";
-                        string customerName = selectedRows[0].Cells["CustomerName"]?.Value?.ToString()?.Trim() ?? "";
-                        string customerEmail = GetCustomerEmail(customerPhone, customerName);
+                        // =====================================================
+                        // 1. UPDATE daxuatthanhcong = 1
+                        //    -> Thực hiện độc lập và COMMIT ngay
+                        // =====================================================
 
-                        if (!string.IsNullOrEmpty(customerEmail))
+                        string sqlupdate_daxuat = @"
+        UPDATE Orders_viettel
+        SET daxuatthanhcong = 1
+        WHERE id IN ('" + idsForSql + "')";
+
+                        using (SqlCommand cmd = new SqlCommand(sqlupdate_daxuat, cnn))
                         {
-                            foreach (string invoiceNo in viettelInvoiceNos)
+                            int affectedRows = cmd.ExecuteNonQuery();
+
+                            if (affectedRows == 0)
                             {
-                                string pdfPath = GetInvoicePDF(invoiceNo, txtmauso.Text);
-                                if (!string.IsNullOrEmpty(pdfPath) && File.Exists(pdfPath))
-                                {
-                                    SendInvoiceEmail(customerEmail, customerName, invoiceNo, pdfPath);
-                                }
+                                throw new Exception(
+                                    "Không có đơn hàng nào được cập nhật daxuatthanhcong = 1.");
                             }
                         }
-                        else
+
+                        // =====================================================
+                        // 2. UPDATE thông tin hóa đơn
+                        //    -> Không nằm trong transaction với bước 1
+                        // =====================================================
+
+                        try
                         {
-                            MessageBox.Show("Customer chưa có email. Không thể gửi email hóa đơn.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                            string sqlupdate = @"
+            UPDATE Orders_viettel
+            SET 
+                DateInvViettel = @DateInvViettel,
+                InvoiceNoViettel = @InvoiceNoViettel,
+                mauso = @Mauso
+            WHERE id IN ('" + idsForSql + "')";
+
+                            using (SqlCommand cmd = new SqlCommand(sqlupdate, cnn))
+                            {
+                                cmd.Parameters.AddWithValue("@DateInvViettel", dtNow);
+                                cmd.Parameters.AddWithValue("@InvoiceNoViettel", combinedInvoiceNos);
+                                cmd.Parameters.AddWithValue("@Mauso", txtmauso.Text);
+
+                                cmd.ExecuteNonQuery();
+                            }
+
+                            // Cập nhật tương tự cho bảng Orders
+                            //    -> Lỗi ở bước này không ảnh hưởng dữ liệu đã lưu vào Orders_viettel
+                            try
+                            {
+                                string sqlupdate_orders = @"
+            UPDATE Orders
+            SET
+                DateInvViettel = @DateInvViettel,
+                InvoiceNoViettel = @InvoiceNoViettel,
+                mauso = @Mauso
+            WHERE id IN ('" + idsForSql + "')";
+
+                                using (SqlCommand cmd = new SqlCommand(sqlupdate_orders, cnn))
+                                {
+                                    cmd.Parameters.AddWithValue("@DateInvViettel", dtNow);
+                                    cmd.Parameters.AddWithValue("@InvoiceNoViettel", combinedInvoiceNos);
+                                    cmd.Parameters.AddWithValue("@Mauso", txtmauso.Text);
+
+                                    cmd.ExecuteNonQuery();
+                                }
+                            }
+                            catch (Exception exOrders)
+                            {
+                                MessageBox.Show(
+                                    "Đã cập nhật Orders_viettel nhưng cập nhật bảng Orders bị lỗi.\n\n"
+                                    + exOrders.Message,
+                                    "Cảnh báo",
+                                    MessageBoxButtons.OK,
+                                    MessageBoxIcon.Warning);
+                            }
+
+                            MessageBox.Show(
+                                "OK - Số HĐ Viettel: " + combinedInvoiceNos,
+                                "Thông báo",
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Information);
+                        }
+                        catch (Exception ex)
+                        {
+                            // Bước 2 lỗi nhưng KHÔNG rollback bước 1
+                            MessageBox.Show(
+                                "Đã cập nhật daxuatthanhcong = 1 nhưng cập nhật thông tin hóa đơn bị lỗi.\n\n"
+                                + ex.Message,
+                                "Cảnh báo",
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Warning);
                         }
                     }
-                    catch (Exception emailEx)
+                    finally
                     {
-                        log.Error($"Lỗi khi gửi email: {emailEx.Message}");
-                        MessageBox.Show($"Lỗi khi gửi email: {emailEx.Message}", "Cảnh báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        if (cnn.State == ConnectionState.Open)
+                            cnn.Close();
                     }
+
                 }
                 else
                 {
-                    string request = txtBody.Text;
-                    if (string.IsNullOrEmpty(request))
-                    {
-                        MessageBox.Show("Chưa nhập giá trị text của body");
-                        return;
-                    }
+                    //string request = txtBody.Text;
+                    //if (string.IsNullOrEmpty(request))
+                    //{
+                    //    MessageBox.Show("Chưa nhập giá trị text của body");
+                    //    return;
+                    //}
 
-                    string result = CreateRequest.webRequestV2(apiLink, request, strAccessToken, "POST", contentType, proxy, port, ssl);
+                    //string result = CreateRequest.webRequestV2(apiLink, request, strAccessToken, "POST", contentType, proxy, port, ssl);
+                    ////set daxuatthanhcong = true
+  
+                    ////string sqlupdate_daxuat = "update Orders_viettel set daxuatthanhcong = true  where id in ('" + idsForSql + "')";
+                    ////SqlCommand comupdate_daxuat = new SqlCommand(sqlupdate_daxuat, cnn);
+                    ////comupdate_daxuat.ExecuteNonQuery();
+                    ////cnn.Close();
 
-                    sohoadon_vtel = "";
-                    string[] sohoadon = result.Split(',');
-                    for (int i = 0; i < sohoadon.Length; i++)
-                    {
-                        if (sohoadon[i].ToString().Contains("invoiceNo") == true)
-                        {
-                            sohoadon_vtel = sohoadon[i].Split(':')[1].ToString().Replace("\"", "").Trim();
-                            break;
-                        }
-                    }
 
-                    if (string.IsNullOrEmpty(sohoadon_vtel))
-                    {
-                        MessageBox.Show("Không thể lấy số hóa đơn từ kết quả trả về!");
-                        return;
-                    }
+                    //sohoadon_vtel = "";
+                    //string[] sohoadon = result.Split(',');
+                    //for (int i = 0; i < sohoadon.Length; i++)
+                    //{
+                    //    if (sohoadon[i].ToString().Contains("invoiceNo") == true)
+                    //    {
+                    //        sohoadon_vtel = sohoadon[i].Split(':')[1].ToString().Replace("\"", "").Trim();
+                    //        break;
+                    //    }
+                    //}
 
-                    string dtNow = DateTime.Today.ToString("dd-MMM-yyyy");
-                    cnn.Open();
-                    string idsForSql = string.Join("','", listIds);
-                    string sqlupdate = "update Orders_viettel set DateInvViettel= '" + dtNow + "', InvoiceNoViettel = '" + sohoadon_vtel + "', mauso = '" + txtmauso.Text + "' where id in ('" + idsForSql + "')";
-                    SqlCommand comupdate = new SqlCommand(sqlupdate, cnn);
-                    comupdate.ExecuteNonQuery();
-                    cnn.Close();
+                    //if (string.IsNullOrEmpty(sohoadon_vtel))
+                    //{
+                    //    MessageBox.Show("Không thể lấy số hóa đơn từ kết quả trả về!");
+                    //    return;
+                    //}
 
-                    MessageBox.Show("OK " + result);
+                    //string dtNow = DateTime.Today.ToString("dd-MMM-yyyy");
+                    //cnn.Open();
+                    //string idsForSql = string.Join("','", listIds);
+                    //string sqlupdate = "update Orders_viettel set DateInvViettel= '" + dtNow + "', InvoiceNoViettel = '" + sohoadon_vtel + "', mauso = '" + txtmauso.Text + "' where id in ('" + idsForSql + "')";
+                    //SqlCommand comupdate = new SqlCommand(sqlupdate, cnn);
+                    //comupdate.ExecuteNonQuery();
+                    //cnn.Close();
 
-                    try
-                    {
-                        string customerPhone = selectedRows[0].Cells["CustomerPhone"]?.Value?.ToString()?.Trim() ?? "";
-                        string customerName = selectedRows[0].Cells["CustomerName"]?.Value?.ToString()?.Trim() ?? "";
-                        string customerEmail = GetCustomerEmail(customerPhone, customerName);
+                    //MessageBox.Show("OK " + result);
 
-                        if (!string.IsNullOrEmpty(customerEmail))
-                        {
-                            string pdfPath = GetInvoicePDF(sohoadon_vtel, txtmauso.Text);
+                    //try
+                    //{
+                    //    string customerPhone = selectedRows[0].Cells["CustomerPhone"]?.Value?.ToString()?.Trim() ?? "";
+                    //    string customerName = selectedRows[0].Cells["CustomerName"]?.Value?.ToString()?.Trim() ?? "";
+                    //    string customerEmail = GetCustomerEmail(customerPhone, customerName);
 
-                            if (!string.IsNullOrEmpty(pdfPath) && File.Exists(pdfPath))
-                            {
-                                SendInvoiceEmail(customerEmail, customerName, sohoadon_vtel, pdfPath);
-                            }
-                            else
-                            {
-                                MessageBox.Show("Không thể tải PDF hóa đơn để gửi email.", "Cảnh báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                            }
-                        }
-                        else
-                        {
-                            MessageBox.Show("Customer chưa có email. Không thể gửi email hóa đơn.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                        }
-                    }
-                    catch (Exception emailEx)
-                    {
-                        log.Error($"Lỗi khi gửi email: {emailEx.Message}");
-                        MessageBox.Show($"Lỗi khi gửi email: {emailEx.Message}", "Cảnh báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                    }
+                    //    if (!string.IsNullOrEmpty(customerEmail))
+                    //    {
+                    //        string pdfPath = GetInvoicePDF(sohoadon_vtel, txtmauso.Text);
+
+                    //        if (!string.IsNullOrEmpty(pdfPath) && File.Exists(pdfPath))
+                    //        {
+                    //            SendInvoiceEmail(customerEmail, customerName, sohoadon_vtel, pdfPath);
+                    //        }
+                    //        else
+                    //        {
+                    //            MessageBox.Show("Không thể tải PDF hóa đơn để gửi email.", "Cảnh báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    //        }
+                    //    }
+                    //    else
+                    //    {
+                    //        MessageBox.Show("Customer chưa có email. Không thể gửi email hóa đơn.", "Thông báo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    //    }
+                    //}
+                    //catch (Exception emailEx)
+                    //{
+                    //    log.Error($"Lỗi khi gửi email: {emailEx.Message}");
+                    //    MessageBox.Show($"Lỗi khi gửi email: {emailEx.Message}", "Cảnh báo", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    //}
                 }
             }
             catch (Exception ex)
@@ -2696,6 +2813,14 @@ namespace InvoiceClient
             catch (Exception ex)
             {
                 MessageBox.Show("Lỗi khi mở form chỉnh sửa: " + ex.Message, "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void btnAppUsers_Click(object sender, EventArgs e)
+        {
+            using (frmAppUsers frm = new frmAppUsers())
+            {
+                frm.ShowDialog(this);
             }
         }
 

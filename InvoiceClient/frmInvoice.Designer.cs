@@ -37,6 +37,7 @@ namespace InvoiceClient
             this.btnCreateInvoiceDraft = new System.Windows.Forms.Button();
             this.btnUpdatePaymentStatus = new System.Windows.Forms.Button();
             this.btnEdit = new System.Windows.Forms.Button();
+            this.btnAppUsers = new System.Windows.Forms.Button();
             this.txtBody = new System.Windows.Forms.TextBox();
             this.chkExample = new System.Windows.Forms.CheckBox();
             this.chkProxy = new System.Windows.Forms.CheckBox();
@@ -160,6 +161,16 @@ namespace InvoiceClient
             this.btnEdit.UseVisualStyleBackColor = false;
             this.btnEdit.Click += new System.EventHandler(this.btnEdit_Click);
             // 
+            // btnAppUsers
+            // 
+            this.btnAppUsers.Location = new System.Drawing.Point(347, 114);
+            this.btnAppUsers.Name = "btnAppUsers";
+            this.btnAppUsers.Size = new System.Drawing.Size(149, 40);
+            this.btnAppUsers.TabIndex = 55;
+            this.btnAppUsers.Text = "Tài khoản App";
+            this.btnAppUsers.UseVisualStyleBackColor = true;
+            this.btnAppUsers.Click += new System.EventHandler(this.btnAppUsers_Click);
+            // 
             // txtBody
             // 
             this.txtBody.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
@@ -183,6 +194,7 @@ namespace InvoiceClient
             this.chkExample.TabIndex = 8;
             this.chkExample.Text = "Lấy giá trị Json mặc định";
             this.chkExample.UseVisualStyleBackColor = true;
+            this.chkExample.Visible = false;
             // 
             // chkProxy
             // 
@@ -579,6 +591,7 @@ namespace InvoiceClient
             this.Controls.Add(this.txtBody);
             this.Controls.Add(this.btnUpdatePaymentStatus);
             this.Controls.Add(this.btnEdit);
+            this.Controls.Add(this.btnAppUsers);
             this.Controls.Add(this.btnCreateInvoiceDraft);
             this.Controls.Add(this.btnCancel);
             this.Controls.Add(this.btnSavePDF);
@@ -608,6 +621,7 @@ namespace InvoiceClient
         private System.Windows.Forms.Button btnCreateInvoiceDraft;
         private System.Windows.Forms.Button btnUpdatePaymentStatus;
         private System.Windows.Forms.Button btnEdit;
+        private System.Windows.Forms.Button btnAppUsers;
         private System.Windows.Forms.TextBox txtBody;
         private System.Windows.Forms.CheckBox chkExample;
         private System.Windows.Forms.CheckBox chkProxy;

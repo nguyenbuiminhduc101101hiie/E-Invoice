@@ -28,7 +28,7 @@
     <MinimumRequiredVersion>1.0.0.13</MinimumRequiredVersion>
     <CreateWebPageOnPublish>true</CreateWebPageOnPublish>
     <WebPage>publish.htm</WebPage>
-    <ApplicationRevision>84</ApplicationRevision>
+    <ApplicationRevision>89</ApplicationRevision>
     <ApplicationVersion>1.0.0.%2a</ApplicationVersion>
     <UseApplicationTrust>false</UseApplicationTrust>
     <CreateDesktopShortcut>true</CreateDesktopShortcut>
@@ -69,6 +69,10 @@
     <SignManifests>true</SignManifests>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="BCrypt.Net-Next, Version=4.0.3.0, Culture=neutral, PublicKeyToken=1e11be04b6288443, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>Lib\BCrypt.Net-Next.dll</HintPath>
+    </Reference>
     <Reference Include="log4net, Version=1.2.11.0, Culture=neutral, PublicKeyToken=669e0ddf0bb1aa2a, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>Lib\log4net.dll</HintPath>
@@ -90,6 +94,12 @@
   <ItemGroup>
     <Compile Include="Connect_sql.cs" />
     <Compile Include="CreateRequest.cs" />
+    <Compile Include="frmAppUsers.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="frmAppUsers.Designer.cs">
+      <DependentUpon>frmAppUsers.cs</DependentUpon>
+    </Compile>
     <Compile Include="frmInvoice.cs">
       <SubType>Form</SubType>
     </Compile>
